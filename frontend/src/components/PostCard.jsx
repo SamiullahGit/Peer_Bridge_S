@@ -131,7 +131,7 @@ export default function PostCard({
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        marginTop: 14, paddingTop: 14, borderTop: '1.5px solid #E4EAF2',
+        marginTop: 14, paddingTop: 14, borderTop: '1.5px solid #E4EAF2', flexWrap: 'wrap',
       }}>
         <button className={`act-btn${post.liked ? ' liked' : ''}`} onClick={() => onLike(post.id)}>
           <svg width="13" height="13" viewBox="0 0 24 24"
@@ -192,7 +192,7 @@ export default function PostCard({
             </div>
           ))}
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
             <Avatar name={me?.name || '?'} size={30} />
             <input
               className="reply-input" value={replyDraft}

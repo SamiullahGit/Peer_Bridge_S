@@ -20,6 +20,7 @@ export default function Landing() {
   const [heroEmail, setHeroEmail] = useState('');
   const [heroErr,   setHeroErr]   = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [menuOpen,  setMenuOpen]  = useState(false);
   const [modalEmail, setModalEmail] = useState('');
   const [infoKey,    setInfoKey]   = useState(null);   // 'about' | 'blog' | 'contact' | 'privacy' | 'terms' | 'support'
 
@@ -40,10 +41,22 @@ export default function Landing() {
     return () => obs.disconnect();
   }, [token]);
 
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+
+    const onResize = () => {
+      if (window.innerWidth > 960) setMenuOpen(false);
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [menuOpen]);
+
   // Already signed in -> jump straight to the feed.
   if (token) return <Navigate to="/feed" replace />;
 
   function openAuth(prefill = '') {
+    setMenuOpen(false);
     setModalEmail(prefill);
     setModalOpen(true);
   }
@@ -53,6 +66,17 @@ export default function Landing() {
     setHeroErr(!!v && !NUST_RE.test(v));
     openAuth(v);
   }
+
+  function handleNavAction(action) {
+    setMenuOpen(false);
+    action();
+  }
+
+  const navLinks = [
+    { label: 'How it works', href: '#hiw' },
+    { label: 'Resources', href: '#features' },
+    { label: 'About', onClick: () => setInfoKey('about') },
+  ];
 
   return (
     <div className="landing">
@@ -65,15 +89,38 @@ export default function Landing() {
           <span className="lp-logo-wm">Peer Bridge</span>
         </a>
 
-        <ul className="lp-nav-links">
-          <li><a href="#hiw">How it works</a></li>
-          <li><a href="#features">Resources</a></li>
-          <li><a href="#" onClick={(e) => e.preventDefault()}>About</a></li>
-        </ul>
+        <button
+          type="button"
+          className={`lp-menu-toggle${menuOpen ? ' is-open' : ''}`}
+          aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
 
-        <div className="lp-nav-ctas">
+        <div className={`lp-nav-panel${menuOpen ? ' is-open' : ''}`}>
+          <ul className="lp-nav-links">
+            {navLinks.map((link) => (
+              <li key={link.label}>
+                {link.href ? (
+                  <a href={link.href} onClick={() => setMenuOpen(false)}>{link.label}</a>
+                ) : (
+                  <a href="#" onClick={(e) => {
+                    e.preventDefault();
+                    handleNavAction(link.onClick);
+                  }}>{link.label}</a>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="lp-nav-ctas">
           <button className="lp-btn-outline" onClick={() => openAuth()}>Sign in</button>
           <button className="lp-btn-blue"    onClick={() => openAuth()}>Get started</button>
+          </div>
         </div>
       </nav>
 

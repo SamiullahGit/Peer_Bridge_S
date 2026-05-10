@@ -123,7 +123,7 @@ export default function Resources() {
         </section>
 
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 18,
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 18,
         }}>
           {resources.length === 0 ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
@@ -204,7 +204,7 @@ export default function Resources() {
             </div>
             <form onSubmit={handleUpload} style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 12 }}>
               <input name="title" className="input" placeholder="Title *" required style={{ padding: '11px 14px', fontSize: 14 }} />
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="form-two-col">
                 <select name="category" className="input" style={{ padding: '11px 14px', fontSize: 14 }}>
                   {CATS.filter((c) => c).map((c) => <option key={c}>{c}</option>)}
                 </select>

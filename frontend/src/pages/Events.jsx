@@ -98,7 +98,7 @@ export default function Events() {
         </section>
 
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20,
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 20,
         }}>
           {events.length === 0 ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
@@ -148,7 +148,7 @@ function CreateEventModal({ creating, onSubmit, onClose }) {
                  style={{ padding: '11px 14px', fontSize: 14 }} />
           <input name="venue" className="input" placeholder="Venue *" required
                  style={{ padding: '11px 14px', fontSize: 14 }} />
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="form-two-col">
             <input name="event_date" type="date" className="input" required
                    style={{ padding: '11px 14px', fontSize: 14 }} />
             <input name="event_time" type="time" className="input"

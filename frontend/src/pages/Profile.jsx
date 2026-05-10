@@ -254,7 +254,7 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
         onChange={(e) => setEdit((p) => ({ ...p, name: e.target.value }))}
         style={{ fontSize: 16, padding: '10px 14px' }}
       />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div className="form-two-col">
         <select className="input" value={edit.dept} onChange={(e) => setEdit((p) => ({ ...p, dept: e.target.value }))}
                 style={{ padding: '10px 14px', fontSize: 14 }}>
           {DEPTS.map((d) => <option key={d} value={d}>{d || 'Department'}</option>)}
@@ -274,7 +274,7 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
         onChange={(e) => setEdit((p) => ({ ...p, bio: e.target.value }))}
         style={{ resize: 'vertical' }}
       />
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div className="stack-actions">
         <button className="btn btn-primary" onClick={onSave} style={{ padding: '10px 18px' }}>Save</button>
         <button className="btn btn-ghost"   onClick={onCancel} style={{ padding: '10px 18px' }}>Cancel</button>
         <button className="btn btn-ghost"   onClick={onDelete}

@@ -8,7 +8,7 @@
 // Render), so we read the absolute backend URL from VITE_API_BASE at
 // build time. Set it in Vercel's env vars to e.g.
 // "https://peerbridge-api.onrender.com/api".
-export const API_BASE = 'https://peer-bridge-api.onrender.com/api';
+export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 
 // Subscribers to xp_earned events from any pb.* call. The XpToastHost

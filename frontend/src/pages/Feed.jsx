@@ -55,6 +55,7 @@ export default function Feed() {
   // Layout state
   const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem('pb_sidebar') === 'collapsed');
   const [panelHidden, setPanelHidden] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Data
   const [posts, setPosts]       = useState([]);
@@ -97,6 +98,7 @@ export default function Feed() {
   useEffect(() => {
     let scheduled = false;
     function onScroll(e) {
+      if (window.innerWidth <= 960) return;
       if (expandLock.current || scheduled) return;
       if (e.target.closest && e.target.closest('.snav, .feed-topnav')) return;
       scheduled = true;
@@ -110,6 +112,14 @@ export default function Feed() {
     }
     document.addEventListener('scroll', onScroll, true);
     return () => document.removeEventListener('scroll', onScroll, true);
+  }, []);
+
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth > 960) setMobileNavOpen(false);
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   async function loadAll() {
@@ -204,6 +214,10 @@ export default function Feed() {
   }
 
   function toggleSidebar() {
+    if (window.innerWidth <= 960) {
+      setMobileNavOpen((open) => !open);
+      return;
+    }
     expandLock.current = true;
     setCollapsed((c) => {
       const next = !c;
@@ -211,6 +225,10 @@ export default function Feed() {
       return next;
     });
     setTimeout(() => { expandLock.current = false; }, 400);
+  }
+
+  function closeMobileNav() {
+    setMobileNavOpen(false);
   }
 
   async function respondRequest(reqId, status) {
@@ -232,6 +250,17 @@ export default function Feed() {
       <div className={`feed-app${collapsed ? ' sidebar-collapsed' : ''}${panelHidden ? ' panel-hidden' : ''}`}>
         {/* ── Topnav ─────────────────────────────────────────── */}
         <header className="feed-topnav">
+          <button
+            type="button"
+            className={`feed-mobile-toggle${mobileNavOpen ? ' is-open' : ''}`}
+            aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
           <Link to="/feed" className="feed-topnav-logo">
             <BridgeLogo width={38} height={26} variant="nav" />
             <span>Peer Bridge</span>
@@ -264,6 +293,10 @@ export default function Feed() {
               New post
             </button>
 
+            <button className="panel-mobile-btn" onClick={() => setPanelHidden((hidden) => !hidden)}>
+              {panelHidden ? 'Show panel' : 'Hide panel'}
+            </button>
+
             <div className="user-chip" onClick={() => navigate('/profile')}>
               {me?.profile_image
                 ? <img src={me.profile_image} alt={me.name}
@@ -280,6 +313,7 @@ export default function Feed() {
         </header>
 
         {/* ── Sidebar ───────────────────────────────────────── */}
+        <div className={`feed-mobile-backdrop${mobileNavOpen ? ' is-open' : ''}`} onClick={closeMobileNav} />
         <FeedSidebar
           isMentor={isMentor}
           requestsCount={requests.length}
@@ -288,6 +322,8 @@ export default function Feed() {
           onOpenRequests={() => setRequestsOpen(true)}
           me={me}
           initials={initials}
+          mobileNavOpen={mobileNavOpen}
+          onNavigate={closeMobileNav}
         />
 
         {/* ── Main feed ─────────────────────────────────────── */}
@@ -320,7 +356,7 @@ export default function Feed() {
                   fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
                 }}>{initials}</div>}
             <input type="text" placeholder="Ask a question, share a resource, or post an update…" readOnly />
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+            <div className="composer-actions" onClick={(e) => e.stopPropagation()}>
               <button className="comp-btn" onClick={() => openComposer('Academic Help')}>Ask</button>
               <button className="comp-btn" onClick={() => openComposer('Resources')}>Share</button>
             </div>
@@ -489,9 +525,9 @@ export default function Feed() {
 
 /* ── Inline sidebar (uses .snav classes from shared.css) ─────────── */
 
-function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenRequests, me, initials }) {
+function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenRequests, me, initials, mobileNavOpen, onNavigate }) {
   return (
-    <nav className="snav">
+    <nav className={`snav${mobileNavOpen ? ' mobile-open' : ''}`}>
       <button className="snav-pin-btn" onClick={onToggle} title="Toggle sidebar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -502,17 +538,17 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
       </button>
 
       <div className="snav-section">Main</div>
-      <FeedNavLink to="/feed"      active label="Home" icon={<><path d="M3 12 12 4l9 8" /><path d="M5 10v10h14V10" /></>} />
-      <FeedNavLink to="/mentors"   label="Mentors" icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>} />
-      <FeedNavLink to="/resources" label="Resources" icon={<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z" />} />
-      <FeedNavLink to="/events"    label="Events" icon={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>} />
-      <FeedNavLink to="/messages"  label="Messages" icon={<path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" />} />
-      <FeedNavLink to="/saved"     label="Saved" icon={<path d="M5 3h12v18l-6-4-6 4V3Z" />} />
+      <FeedNavLink to="/feed"      active label="Home" onNavigate={onNavigate} icon={<><path d="M3 12 12 4l9 8" /><path d="M5 10v10h14V10" /></>} />
+      <FeedNavLink to="/mentors"   label="Mentors" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>} />
+      <FeedNavLink to="/resources" label="Resources" onNavigate={onNavigate} icon={<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z" />} />
+      <FeedNavLink to="/events"    label="Events" onNavigate={onNavigate} icon={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>} />
+      <FeedNavLink to="/messages"  label="Messages" onNavigate={onNavigate} icon={<path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" />} />
+      <FeedNavLink to="/saved"     label="Saved" onNavigate={onNavigate} icon={<path d="M5 3h12v18l-6-4-6 4V3Z" />} />
 
       {isMentor && (
         <>
           <div className="snav-section" style={{ marginTop: 8 }}>Mentorship</div>
-          <button className="snav-item" type="button" onClick={onOpenRequests}>
+          <button className="snav-item" type="button" onClick={() => { onNavigate(); onOpenRequests(); }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
               <path d="m11 17 2 2a1 1 0 1 0 3-3" />
@@ -531,7 +567,7 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
       )}
 
       <div className="snav-section" style={{ marginTop: 8 }}>Account</div>
-      <FeedNavLink to="/profile" label="My Profile" icon={
+      <FeedNavLink to="/profile" label="My Profile" onNavigate={onNavigate} icon={
         <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="10" r="3" />
           <path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66" /></>
       } />
@@ -569,9 +605,9 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
   );
 }
 
-function FeedNavLink({ to, label, icon, active = false }) {
+function FeedNavLink({ to, label, icon, active = false, onNavigate }) {
   return (
-    <Link to={to} className={`snav-item${active ? ' active' : ''}`}>
+    <Link to={to} className={`snav-item${active ? ' active' : ''}`} onClick={onNavigate}>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
         {icon}

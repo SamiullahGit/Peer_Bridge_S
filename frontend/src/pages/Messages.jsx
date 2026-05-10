@@ -93,7 +93,7 @@ export default function Messages() {
     <Sidebar active="messages" extraClass="messages-page">
       <ToastHost />
       <div className="msg-wrapper">
-        <div className="msg-layout">
+        <div className={`msg-layout${activeId ? ' has-active-chat' : ''}`}>
           <div className="convo-panel">
             <div className="convo-panel-head">
               <div className="convo-panel-title">Messages</div>
@@ -122,6 +122,7 @@ export default function Messages() {
             {activeId ? (
               <>
                 <div className="chat-header">
+                  <button className="chat-back-btn" onClick={() => setActiveId(null)}>Back</button>
                   <Bubble name={activeName} size={40} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <a className="chat-header-name" onClick={() => navigate(`/profile?id=${activeId}`)}>{activeName}</a>

@@ -32,15 +32,22 @@ export default function AuthModal({ initialEmail = '', onClose }) {
   const [email, setEmail]    = useState(initialEmail);
   const [pw, setPw]          = useState('');
   const [otp, setOtp]        = useState(['', '', '', '', '', '']);
-  const [devOTP, setDevOTP]  = useState('');
   const [loading, setLoading] = useState(false);
 
   const otpRefs = useRef([]);
+  const verifyingRef = useRef(false);
+  const sendingRef = useRef(false);
+  const autoSentRef = useRef(false);
 
   // Auto-trigger send-otp on mount when an email was prefilled
   // (i.e. the user hit "Get started" from the landing form).
+  // autoSentRef guards against StrictMode's double-mount in dev.
   useEffect(() => {
-    if (initialEmail && isNustEmail(initialEmail)) handleEmailSubmit();
+    if (autoSentRef.current) return;
+    if (initialEmail && isNustEmail(initialEmail)) {
+      autoSentRef.current = true;
+      handleEmailSubmit();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -63,19 +70,16 @@ export default function AuthModal({ initialEmail = '', onClose }) {
     setOtp(next);
     e.preventDefault();
     otpRefs.current[Math.min(5, text.length - 1)]?.focus();
-    if (text.length === 6) setTimeout(() => handleVerify(text), 200);
   }
 
-  // Whenever all six digits are entered, auto-verify.
-  useEffect(() => {
-    if (step === 'otp' && otpString.length === 6) handleVerify(otpString);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [otpString, step]);
+  // When all digits are entered, the user can click Verify explicitly.
 
   // Handlers ---------------------------------------------------------
   async function handleEmailSubmit() {
+    if (sendingRef.current) return;
     const clean = email.trim();
     if (!isNustEmail(clean)) { toast('Please enter a valid NUST institutional email.'); return; }
+    sendingRef.current = true;
     setLoading(true);
     try {
       const res  = await fetch('/api/auth/send-otp', {
@@ -85,18 +89,20 @@ export default function AuthModal({ initialEmail = '', onClose }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setDevOTP(data.dev_otp || '');
       setOtp(['', '', '', '', '', '']);
       setStep('otp');
     } catch (err) {
       toast(err.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
   }
 
   async function handleVerify(code = otpString) {
+    if (verifyingRef.current) return;
     if (code.length !== 6) return;
+    verifyingRef.current = true;
     setLoading(true);
     try {
       const res  = await fetch('/api/auth/verify-otp', {
@@ -119,6 +125,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
       setOtp(['', '', '', '', '', '']);
     } finally {
       setLoading(false);
+      verifyingRef.current = false;
     }
   }
 
@@ -149,7 +156,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
         <button className="lp-auth-close" onClick={onClose}>X</button>
         <div className="lp-auth-body">
           {step === 'email'   && <EmailStep   {...{ email, setEmail, pw, setPw, pwMode, setPwMode, loading, handleEmailSubmit, handlePwLogin }} />}
-          {step === 'otp'     && <OtpStep     {...{ email, otp, otpRefs, devOTP, loading, setOtpDigit, handleOtpKey, handleOtpPaste, back: () => setStep('email') }} />}
+          {step === 'otp'     && <OtpStep     {...{ email, otp, otpRefs, loading, setOtpDigit, handleOtpKey, handleOtpPaste, handleVerify, back: () => setStep('email') }} />}
           {step === 'profile' && <ProfileStep onDone={(token, user) => { setAuth(token, user); setStep('done'); setTimeout(() => navigate('/feed'), 800); }} />}
           {step === 'done'    && <DoneStep />}
         </div>
@@ -229,7 +236,7 @@ function EmailStep({ email, setEmail, pw, setPw, pwMode, setPwMode, loading, han
   );
 }
 
-function OtpStep({ email, otp, otpRefs, devOTP, loading, setOtpDigit, handleOtpKey, handleOtpPaste, back }) {
+function OtpStep({ email, otp, otpRefs, loading, setOtpDigit, handleOtpKey, handleOtpPaste, handleVerify, back }) {
   return (
     <>
       <div style={{ marginBottom: 20 }}>
@@ -237,15 +244,6 @@ function OtpStep({ email, otp, otpRefs, devOTP, loading, setOtpDigit, handleOtpK
         <div style={{ fontSize: 13.5, color: '#8899B0' }}>
           6-digit code sent to <strong style={{ color: '#4B5C73' }}>{email}</strong>
         </div>
-        {devOTP && (
-          <div style={{
-            marginTop: 10, padding: '8px 12px', background: '#F0FDF4',
-            border: '1px solid #BBF7D0', borderRadius: 8,
-            fontSize: 12, color: '#166534', fontWeight: 600,
-          }}>
-            Dev OTP: <strong>{devOTP}</strong>
-          </div>
-        )}
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {otp.map((digit, i) => (
@@ -265,7 +263,11 @@ function OtpStep({ email, otp, otpRefs, devOTP, loading, setOtpDigit, handleOtpK
       </div>
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={back} className="lp-ghost-btn">&larr; Back</button>
-        <button className="lp-big-btn">{loading ? <Spinner /> : 'Verifying…'}</button>
+        <button
+          onClick={() => handleVerify(otp.join(''))}
+          className="lp-big-btn"
+          disabled={loading || otp.join('').length !== 6}
+        >{loading ? <Spinner /> : 'Verify code'}</button>
       </div>
     </>
   );

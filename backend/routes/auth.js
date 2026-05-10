@@ -34,21 +34,34 @@ function generateOTP() {
 }
 
 async function sendOTPEmail(email, otp) {
-  console.log(`\n[DEV] OTP for ${email}: ${otp}\n`);
-  if (process.env.NODE_ENV !== 'production') return;
+  let sent = false;
 
-  const nodemailer  = require('nodemailer');
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  });
-  await transporter.sendMail({
-    from   : `"Peer Bridge" <${process.env.EMAIL_USER}>`,
-    to     : email,
-    subject: 'Your Peer Bridge verification code',
-    text   : `Your 6-digit code is: ${otp}\nExpires in 10 minutes.`,
-    html   : `<p>Your Peer Bridge verification code is:</p><h2>${otp}</h2><p>Expires in 10 minutes.</p>`,
-  });
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    const nodemailer  = require('nodemailer');
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    try {
+      await transporter.sendMail({
+        from   : `"Peer Bridge" <${process.env.EMAIL_USER}>`,
+        to     : email,
+        subject: 'Your Peer Bridge verification code',
+        text   : `Your 6-digit code is: ${otp}\nExpires in 10 minutes.`,
+        html   : `<p>Your Peer Bridge verification code is:</p><h2>${otp}</h2><p>Expires in 10 minutes.</p>`,
+      });
+      sent = true;
+    } catch (err) {
+      console.error('[auth] Failed to send OTP email:', err.message);
+    }
+  } else {
+    console.warn('[auth] EMAIL_USER/EMAIL_PASS not set — falling back to console-only OTP delivery.');
+  }
+
+  if (!sent) {
+    console.log(`\n[DEV] OTP for ${email}: ${otp}\n`);
+    console.warn('[auth] Falling back to console OTP delivery.');
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -74,34 +87,23 @@ router.post('/send-otp', async (req, res) => {
     const otp     = generateOTP();
     const expires = new Date(Date.now() + 10 * 60 * 1000);   // 10 min
 
-    let user = await User.findOne({ email: clean });
-    if (user) {
-      user.otp_code    = otp;
-      user.otp_expires = expires;
-      await user.save();
-    } else {
-      // Pre-fill the name from the local-part of the email so the row
-      // satisfies the required-name validation. Real name is set during
-      // profile setup.
-      const nameFromEmail = clean
-        .split('@')[0]
-        .replace(/[._-]/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase());
+    const nameFromEmail = clean
+      .split('@')[0]
+      .replace(/[._-]/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
 
-      user = await User.create({
-        name       : nameFromEmail,
-        email      : clean,
-        otp_code   : otp,
-        otp_expires: expires,
-        is_verified: false,
-      });
-    }
+    await User.findOneAndUpdate(
+      { email: clean },
+      {
+        $set         : { otp_code: otp, otp_expires: expires },
+        $setOnInsert : { name: nameFromEmail, email: clean, is_verified: false },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
 
     await sendOTPEmail(clean, otp);
 
-    const resp = { message: 'OTP sent to your NUST email' };
-    if (process.env.NODE_ENV !== 'production') resp.dev_otp = otp;
-    res.json(resp);
+    res.json({ message: 'OTP sent to your NUST email' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to send OTP' });
@@ -129,7 +131,9 @@ router.post('/verify-otp', async (req, res) => {
 
     user.otp_code    = null;
     user.otp_expires = null;
-    if (!isNew) user.is_verified = true;
+    if (user.department && !user.is_verified) {
+      user.is_verified = true;
+    }
     await user.save();
 
     res.json({ token: makeToken(user), user: user.toSafeJSON(), is_new_user: isNew });

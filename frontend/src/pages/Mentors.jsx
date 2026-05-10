@@ -91,7 +91,7 @@ export default function Mentors() {
         </section>
 
         <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
           gap: 20, marginTop: 22,
         }}>
           {mentors.length === 0 ? (

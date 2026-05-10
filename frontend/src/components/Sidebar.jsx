@@ -51,6 +51,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
   const { user, logout } = useAuth();
   const navigate         = useNavigate();
   const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem('pb_sidebar') === 'collapsed');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Mentorship requests for the badge / modal.
   const [requests, setRequests]   = useState([]);
@@ -79,6 +80,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
   useEffect(() => {
     let scheduled = false;
     function onScroll(e) {
+      if (window.innerWidth <= 960) return;
       if (expandLock.current || scheduled) return;
       if (e.target.closest && e.target.closest('.snav')) return;
       scheduled = true;
@@ -92,6 +94,14 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
     }
     document.addEventListener('scroll', onScroll, true);
     return () => document.removeEventListener('scroll', onScroll, true);
+  }, []);
+
+  useEffect(() => {
+    function onResize() {
+      if (window.innerWidth > 960) setMobileNavOpen(false);
+    }
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
   }, []);
 
   // Load incoming mentorship requests for the badge (mentors only).
@@ -117,10 +127,25 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
     }
   }
 
+  function closeMobileNav() {
+    setMobileNavOpen(false);
+  }
+
   return (
     <div className={`with-sidebar${collapsed ? ' sidebar-collapsed' : ''}${extraClass ? ` ${extraClass}` : ''}`}>
       {/* ── Topnav ─────────────────────────────────────────── */}
       <header className="snav-topnav">
+        <button
+          type="button"
+          className={`snav-mobile-toggle${mobileNavOpen ? ' is-open' : ''}`}
+          aria-label={mobileNavOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
         <Link to="/feed" className="snav-topnav-logo">
           <BridgeLogo width={32} height={22} variant="nav" />
           <span>Peer Bridge</span>
@@ -142,7 +167,8 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
       </header>
 
       {/* ── Side-nav ──────────────────────────────────────── */}
-      <nav className="snav">
+      <div className={`snav-mobile-backdrop${mobileNavOpen ? ' is-open' : ''}`} onClick={closeMobileNav} />
+      <nav className={`snav${mobileNavOpen ? ' mobile-open' : ''}`}>
         <button className="snav-pin-btn" onClick={toggleCollapsed} title="Toggle sidebar">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -155,7 +181,8 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
         <div className="snav-section">Main</div>
         {NAV_ITEMS.map(item => (
           <Link key={item.key} to={item.to}
-                className={`snav-item${active === item.key ? ' active' : ''}`}>
+                className={`snav-item${active === item.key ? ' active' : ''}`}
+                onClick={closeMobileNav}>
             <NavIcon>{item.icon}</NavIcon>
             <span>{item.label}</span>
           </Link>
@@ -164,7 +191,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
         {isMentor && (
           <>
             <div className="snav-section" style={{ marginTop: 8 }}>Mentorship</div>
-            <button className="snav-item" type="button" onClick={() => setShowRequests(true)}>
+            <button className="snav-item" type="button" onClick={() => { closeMobileNav(); setShowRequests(true); }}>
               <NavIcon>
                 <path d="m11 17 2 2a1 1 0 1 0 3-3" />
                 <path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4" />
@@ -184,7 +211,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
         )}
 
         <div className="snav-section" style={{ marginTop: 8 }}>Account</div>
-        <Link to="/profile" className={`snav-item${active === 'profile' ? ' active' : ''}`}>
+        <Link to="/profile" className={`snav-item${active === 'profile' ? ' active' : ''}`} onClick={closeMobileNav}>
           <NavIcon>
             <circle cx="12" cy="12" r="10" />
             <circle cx="12" cy="10" r="3" />
