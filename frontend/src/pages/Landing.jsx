@@ -181,10 +181,10 @@ export default function Landing() {
       {/* ── STATS ───────────────────────────────────────────── */}
       <div className="stats-strip">
         <div className="stats-inner">
-          <Stat n="2,847" label="Verified students"  emClass=""        />
-          <Stat n="430"    label="Senior mentors"      emClass="d1"     />
-          <Stat n="12k+"   label="Questions answered"  emClass="d2"     />
-          <Stat n="98%"    label="Satisfaction rate"   emClass="d3"     />
+          <Stat n="10+" label="Verified students"  emClass=""        />
+          <Stat n="5"    label="Senior mentors"      emClass="d1"     />
+          <Stat n="30"   label="Questions answered"  emClass="d2"     />
+          <Stat n="95%"    label="Satisfaction rate"   emClass="d3"     />
         </div>
       </div>
 
