@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://peer-bridge-s.onrender.com/api/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://peer-bridge-s.onrender.com/uploads/:path*" },
+    { "source": "/certificates/:path*", "destination": "https://peer-bridge-s.onrender.com/certificates/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
