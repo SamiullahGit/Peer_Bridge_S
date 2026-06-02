@@ -1,6 +1,4 @@
-const User           = require('../models/User');
-const XpTransaction  = require('../models/XpTransaction');
-const XpNotification = require('../models/XpNotification');
+const { supabase } = require('../config/supabase');
 
 const LEVELS = [
   { name: 'Bronze',   min: 0    },
@@ -19,18 +17,18 @@ function getLevel(xp) {
 /**
  * Award XP to a user.
  *
- * @param {string|ObjectId} userId
+ * @param {string}  userId   - user uuid
  * @param {string}  reason   - human-readable reason shown in history
  * @param {number}  points
  * @param {string?} refType  - 'post' | 'reply' | 'rating' | 'message' | 'resource' | ...
- * @param {string?} refId
- * @param {boolean} passive  - true: store an XpNotification for SSE/polling delivery,
+ * @param {string?} refId    - related row uuid (or null)
+ * @param {boolean} passive  - true: store an XpNotification for polling delivery,
  *                             false: caller will return xp_earned directly in the response.
  * @returns {{ newTotal, newLevel, prevLevel, levelUp }}
  */
 async function awardXP(userId, reason, points, refType = null, refId = null, passive = false) {
   try {
-    await XpTransaction.create({
+    await supabase.from('xp_transactions').insert({
       user_id : userId,
       points,
       reason,
@@ -38,7 +36,11 @@ async function awardXP(userId, reason, points, refType = null, refId = null, pas
       ref_id  : refId,
     });
 
-    const user = await User.findById(userId).select('total_xp xp_level');
+    const { data: user } = await supabase
+      .from('users')
+      .select('total_xp, xp_level')
+      .eq('id', userId)
+      .maybeSingle();
     if (!user) return { newTotal: 0, newLevel: 'Bronze', prevLevel: 'Bronze', levelUp: false };
 
     const prevLevel = user.xp_level || 'Bronze';
@@ -46,9 +48,10 @@ async function awardXP(userId, reason, points, refType = null, refId = null, pas
     const newLevel  = getLevel(newTotal);
     const levelUp   = newLevel !== prevLevel;
 
-    user.total_xp = newTotal;
-    user.xp_level = newLevel;
-    await user.save();
+    await supabase
+      .from('users')
+      .update({ total_xp: newTotal, xp_level: newLevel })
+      .eq('id', userId);
 
     // Passive XP -> recipient is not the request-maker, so deliver via polling.
     if (passive) {
@@ -67,7 +70,7 @@ async function awardXP(userId, reason, points, refType = null, refId = null, pas
 
 async function _storeNotification(userId, points, message, isLevelUp, newLevel) {
   try {
-    await XpNotification.create({
+    await supabase.from('xp_notifications').insert({
       user_id    : userId,
       points,
       message,
@@ -83,7 +86,11 @@ async function _storeNotification(userId, points, message, isLevelUp, newLevel) 
 // or null if the user already received it today.
 async function awardDailyLogin(userId) {
   try {
-    const user = await User.findById(userId).select('last_login_xp_date');
+    const { data: user } = await supabase
+      .from('users')
+      .select('last_login_xp_date')
+      .eq('id', userId)
+      .maybeSingle();
     if (!user) return null;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -92,8 +99,10 @@ async function awardDailyLogin(userId) {
       : null;
     if (last === today) return null;
 
-    user.last_login_xp_date = new Date(today);
-    await user.save();
+    await supabase
+      .from('users')
+      .update({ last_login_xp_date: new Date(today).toISOString() })
+      .eq('id', userId);
 
     const xp = await awardXP(userId, 'Daily login bonus', 2, 'login', null);
     return {

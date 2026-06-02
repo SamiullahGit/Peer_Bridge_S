@@ -2,12 +2,13 @@ const router = require('express').Router();
 const multer = require('multer');
 
 const auth         = require('../middleware/auth');
-const Post         = require('../models/Post');
-const PostLike     = require('../models/PostLike');
-const PostBookmark = require('../models/PostBookmark');
-const Reply        = require('../models/Reply');
+const { supabase } = require('../config/supabase');
 const xpManager    = require('../services/xpManager');
-const { makeStorage, fileUrl } = require('../config/storage');
+const { shapePost, shapeReply } = require('../data/shapers');
+const { makeStorage, fileUrl }  = require('../config/storage');
+
+// Embedded author projection reused across post queries.
+const POST_AUTHOR = 'author:author_id(name,role,department,graduation_year)';
 
 const upload = multer({
   storage: makeStorage('posts', 'post'),
@@ -20,35 +21,24 @@ const upload = multer({
   },
 });
 
-// Shared helper: shape a Post + populated author into the legacy JSON
-// the frontend has been consuming since the SQL days.
+// Make a free-text term safe for a PostgREST ilike / .or() filter.
+function likeTerm(s) {
+  return String(s).replace(/[%,()]/g, ' ').trim();
+}
+
+// Shared helper: attach the viewer's liked/bookmarked flags to a page of posts.
 async function decoratePosts(posts, viewerId) {
   if (!posts.length) return [];
-  const ids = posts.map(p => p._id);
+  const ids = posts.map(p => p.id);
 
-  // One round-trip each for the viewer's likes/bookmarks on this page of posts.
-  const [liked, bookmarked] = await Promise.all([
-    PostLike.find({ user_id: viewerId, post_id: { $in: ids } }).distinct('post_id'),
-    PostBookmark.find({ user_id: viewerId, post_id: { $in: ids } }).distinct('post_id'),
+  const [{ data: liked }, { data: bookmarked }] = await Promise.all([
+    supabase.from('post_likes').select('post_id').eq('user_id', viewerId).in('post_id', ids),
+    supabase.from('post_bookmarks').select('post_id').eq('user_id', viewerId).in('post_id', ids),
   ]);
-  const likedSet = new Set(liked.map(String));
-  const bmSet    = new Set(bookmarked.map(String));
+  const likedSet = new Set((liked || []).map(r => r.post_id));
+  const bmSet    = new Set((bookmarked || []).map(r => r.post_id));
 
-  return posts.map(p => {
-    const obj = p.toObject();
-    const a   = obj.author_id || {};
-    return {
-      ...obj,
-      id              : obj._id.toString(),
-      author_id       : a._id ? a._id.toString() : obj.author_id,
-      author_name     : a.name,
-      author_role     : a.role,
-      department      : a.department,
-      graduation_year : a.graduation_year,
-      liked           : likedSet.has(obj._id.toString()),
-      bookmarked      : bmSet.has(obj._id.toString()),
-    };
-  });
+  return posts.map(p => shapePost(p, likedSet, bmSet));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -60,20 +50,18 @@ router.get('/', auth, async (req, res) => {
     const safeLimit  = Math.min(Math.max(parseInt(limit,  10) || 30, 1), 100);
     const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
-    const filter = { is_hidden: false };
-    if (tag && tag !== 'For you') filter.tag = { $regex: tag, $options: 'i' };
-    if (search) {
-      const re = new RegExp(search, 'i');
-      filter.$or = [{ title: re }, { body: re }];
-    }
+    // Single round-trip: posts + the viewer's liked/bookmarked flags,
+    // computed server-side in get_feed() (see sql/0004_get_feed.sql).
+    const { data, error } = await supabase.rpc('get_feed', {
+      viewer  : req.user.id,
+      p_tag   : (tag && tag !== 'For you') ? likeTerm(tag) : null,
+      p_search: search ? likeTerm(search) : null,
+      p_limit : safeLimit,
+      p_offset: safeOffset,
+    });
+    if (error) throw error;
 
-    const posts = await Post.find(filter)
-      .sort({ created_at: -1 })
-      .skip(safeOffset)
-      .limit(safeLimit)
-      .populate('author_id', 'name role department graduation_year');
-
-    res.json(await decoratePosts(posts, req.user.id));
+    res.json(data || []);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch posts' });
@@ -98,23 +86,25 @@ router.post('/', auth, (req, res) => {
       const { tag, title, body } = req.body;
       if (!tag || !title) return res.status(400).json({ error: 'Tag and title are required' });
 
-      const created = await Post.create({
-        author_id : req.user.id,
-        tag,
-        title,
-        body      : body || null,
-        image_path: fileUrl(req.file),
-      });
-
-      const post = await Post.findById(created._id)
-        .populate('author_id', 'name role department graduation_year');
+      const { data: post, error } = await supabase
+        .from('posts')
+        .insert({
+          author_id : req.user.id,
+          tag,
+          title,
+          body      : body || null,
+          image_path: fileUrl(req.file),
+        })
+        .select(`*, ${POST_AUTHOR}`)
+        .single();
+      if (error) throw error;
 
       const [shaped] = await decoratePosts([post], req.user.id);
 
       // Asking a question -> +5 XP for STUDENT only.
       let xp_earned = null;
       if (req.user.role === 'student') {
-        const xp = await xpManager.awardXP(req.user.id, 'Asked a question', 5, 'post', post._id);
+        const xp = await xpManager.awardXP(req.user.id, 'Asked a question', 5, 'post', post.id);
         xp_earned = { points: 5, message: 'You asked a question', newTotal: xp.newTotal, newLevel: xp.newLevel, levelUp: xp.levelUp };
       }
       res.status(201).json({ ...shaped, ...(xp_earned ? { xp_earned } : {}) });
@@ -130,13 +120,18 @@ router.post('/', auth, (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.get('/bookmarks', auth, async (req, res) => {
   try {
-    const bookmarks = await PostBookmark.find({ user_id: req.user.id }).select('post_id');
-    const ids       = bookmarks.map(b => b.post_id);
+    const { data: bookmarks } = await supabase
+      .from('post_bookmarks').select('post_id').eq('user_id', req.user.id);
+    const ids = (bookmarks || []).map(b => b.post_id);
     if (!ids.length) return res.json([]);
 
-    const posts = await Post.find({ _id: { $in: ids }, is_hidden: false })
-      .sort({ created_at: -1 })
-      .populate('author_id', 'name role department graduation_year');
+    const { data: posts, error } = await supabase
+      .from('posts')
+      .select(`*, ${POST_AUTHOR}`)
+      .in('id', ids)
+      .eq('is_hidden', false)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
 
     res.json(await decoratePosts(posts, req.user.id));
   } catch (err) {
@@ -150,10 +145,12 @@ router.get('/bookmarks', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const post = await Post.findById(req.params.id);
+    const { data: post } = await supabase
+      .from('posts').select('id, author_id').eq('id', req.params.id).maybeSingle();
     if (!post) return res.status(404).json({ error: 'Post not found' });
-    if (post.author_id.toString() !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
-    await post.deleteOne();
+    if (post.author_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    await supabase.from('posts').delete().eq('id', req.params.id);
     res.json({ message: 'Deleted' });
   } catch {
     res.status(500).json({ error: 'Failed to delete post' });
@@ -165,13 +162,16 @@ router.delete('/:id', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/:id/like', auth, async (req, res) => {
   try {
-    const existing = await PostLike.findOneAndDelete({ user_id: req.user.id, post_id: req.params.id });
-    if (existing) {
-      await Post.findOneAndUpdate({ _id: req.params.id, likes_count: { $gt: 0 } }, { $inc: { likes_count: -1 } });
+    const { data: removed } = await supabase
+      .from('post_likes').delete()
+      .eq('user_id', req.user.id).eq('post_id', req.params.id)
+      .select();
+    if (removed && removed.length) {
+      await supabase.rpc('adjust_counter', { p_table: 'posts', p_id: req.params.id, p_column: 'likes_count', p_delta: -1 });
       return res.json({ liked: false });
     }
-    await PostLike.create({ user_id: req.user.id, post_id: req.params.id });
-    await Post.findByIdAndUpdate(req.params.id, { $inc: { likes_count: 1 } });
+    await supabase.from('post_likes').insert({ user_id: req.user.id, post_id: req.params.id });
+    await supabase.rpc('adjust_counter', { p_table: 'posts', p_id: req.params.id, p_column: 'likes_count', p_delta: 1 });
     res.json({ liked: true });
   } catch {
     res.status(500).json({ error: 'Failed to toggle like' });
@@ -183,13 +183,16 @@ router.post('/:id/like', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/:id/bookmark', auth, async (req, res) => {
   try {
-    const existing = await PostBookmark.findOneAndDelete({ user_id: req.user.id, post_id: req.params.id });
-    if (existing) {
-      await Post.findOneAndUpdate({ _id: req.params.id, bookmarks_count: { $gt: 0 } }, { $inc: { bookmarks_count: -1 } });
+    const { data: removed } = await supabase
+      .from('post_bookmarks').delete()
+      .eq('user_id', req.user.id).eq('post_id', req.params.id)
+      .select();
+    if (removed && removed.length) {
+      await supabase.rpc('adjust_counter', { p_table: 'posts', p_id: req.params.id, p_column: 'bookmarks_count', p_delta: -1 });
       return res.json({ bookmarked: false });
     }
-    await PostBookmark.create({ user_id: req.user.id, post_id: req.params.id });
-    await Post.findByIdAndUpdate(req.params.id, { $inc: { bookmarks_count: 1 } });
+    await supabase.from('post_bookmarks').insert({ user_id: req.user.id, post_id: req.params.id });
+    await supabase.rpc('adjust_counter', { p_table: 'posts', p_id: req.params.id, p_column: 'bookmarks_count', p_delta: 1 });
     res.json({ bookmarked: true });
   } catch {
     res.status(500).json({ error: 'Failed to toggle bookmark' });
@@ -201,21 +204,14 @@ router.post('/:id/bookmark', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.get('/:id/replies', auth, async (req, res) => {
   try {
-    const replies = await Reply.find({ post_id: req.params.id })
-      .sort({ created_at: 1 })
-      .populate('author_id', 'name role');
+    const { data: replies, error } = await supabase
+      .from('replies')
+      .select('*, author:author_id(name,role)')
+      .eq('post_id', req.params.id)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
 
-    res.json(replies.map(r => {
-      const obj = r.toObject();
-      const a   = obj.author_id || {};
-      return {
-        ...obj,
-        id          : obj._id.toString(),
-        author_id   : a._id ? a._id.toString() : obj.author_id,
-        author_name : a.name,
-        author_role : a.role,
-      };
-    }));
+    res.json((replies || []).map(shapeReply));
   } catch {
     res.status(500).json({ error: 'Failed to fetch replies' });
   }
@@ -226,31 +222,23 @@ router.post('/:id/replies', auth, async (req, res) => {
     const { text } = req.body;
     if (!text) return res.status(400).json({ error: 'Reply text is required' });
 
-    const created = await Reply.create({
-      post_id  : req.params.id,
-      author_id: req.user.id,
-      text,
-    });
-    await Post.findByIdAndUpdate(req.params.id, { $inc: { comments_count: 1 } });
+    const { data: reply, error } = await supabase
+      .from('replies')
+      .insert({ post_id: req.params.id, author_id: req.user.id, text })
+      .select('*, author:author_id(name,role)')
+      .single();
+    if (error) throw error;
 
-    const reply = await Reply.findById(created._id).populate('author_id', 'name role');
-    const a     = reply.author_id || {};
+    await supabase.rpc('adjust_counter', { p_table: 'posts', p_id: req.params.id, p_column: 'comments_count', p_delta: 1 });
 
     // Answering -> +10 XP for MENTOR only.
     let xp_earned = null;
     if (req.user.role === 'mentor') {
-      const xp = await xpManager.awardXP(req.user.id, 'Answered a question', 10, 'reply', reply._id);
+      const xp = await xpManager.awardXP(req.user.id, 'Answered a question', 10, 'reply', reply.id);
       xp_earned = { points: 10, message: 'You answered a question', newTotal: xp.newTotal, newLevel: xp.newLevel, levelUp: xp.levelUp };
     }
 
-    res.status(201).json({
-      ...reply.toObject(),
-      id          : reply._id.toString(),
-      author_id   : a._id ? a._id.toString() : reply.author_id,
-      author_name : a.name,
-      author_role : a.role,
-      ...(xp_earned ? { xp_earned } : {}),
-    });
+    res.status(201).json({ ...shapeReply(reply), ...(xp_earned ? { xp_earned } : {}) });
   } catch {
     res.status(500).json({ error: 'Failed to add reply' });
   }

@@ -1,41 +1,42 @@
-// One-shot seeder: drops every collection and re-inserts the canonical
-// NUST demo data (mirrors the old SQL schema.sql).
+// One-shot seeder for Supabase/Postgres: clears every table and re-inserts
+// the canonical NUST demo data (same dataset as the old Mongo seed).
 //
 // Usage: npm run seed
 //
 // All passwords are bcrypted "Test@123".
+//
+// Relationship wiring: users and posts get client-generated UUIDs so the
+// 1-based index helpers (u(n), p(n)) work exactly like the old seed.
 
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 
-const bcrypt = require('bcryptjs');
+const bcrypt       = require('bcryptjs');
+const { randomUUID } = require('crypto');
+const { supabase } = require('../config/supabase');
 
-const connectDB           = require('../config/db');
-const mongoose            = require('mongoose');
-const User                = require('../models/User');
-const Post                = require('../models/Post');
-const Reply               = require('../models/Reply');
-const Message             = require('../models/Message');
-const Resource            = require('../models/Resource');
-const Event               = require('../models/Event');
-const Rating              = require('../models/Rating');
-const MentorshipRequest   = require('../models/MentorshipRequest');
-const Report              = require('../models/Report');
-const PostLike            = require('../models/PostLike');
-const PostBookmark        = require('../models/PostBookmark');
-const XpTransaction       = require('../models/XpTransaction');
-const XpNotification      = require('../models/XpNotification');
-const Certificate         = require('../models/Certificate');
+// supabase-js refuses an unfiltered delete; this matches every real row.
+const ALL = ['id', '00000000-0000-0000-0000-000000000000'];
+
+async function clearTable(name) {
+  const { error } = await supabase.from(name).delete().neq(...ALL);
+  if (error) throw new Error(`clear ${name}: ${error.message}`);
+}
+
+async function insert(name, rows) {
+  const { error } = await supabase.from(name).insert(rows);
+  if (error) throw new Error(`insert ${name}: ${error.message}`);
+}
 
 async function run() {
-  await connectDB();
-  console.log('  Clearing collections...');
-  await Promise.all([
-    User.deleteMany({}),     Post.deleteMany({}),     Reply.deleteMany({}),
-    Message.deleteMany({}),  Resource.deleteMany({}), Event.deleteMany({}),
-    Rating.deleteMany({}),   MentorshipRequest.deleteMany({}),
-    Report.deleteMany({}),   PostLike.deleteMany({}), PostBookmark.deleteMany({}),
-    XpTransaction.deleteMany({}), XpNotification.deleteMany({}), Certificate.deleteMany({}),
-  ]);
+  console.log('  Clearing tables...');
+  // Child tables first (FKs are ON DELETE CASCADE, but explicit is clearer).
+  for (const t of [
+    'xp_notifications', 'xp_transactions', 'certificates', 'reports',
+    'events', 'resources', 'ratings', 'messages', 'mentorship_requests',
+    'post_bookmarks', 'post_likes', 'replies', 'posts', 'users',
+  ]) {
+    await clearTable(t);
+  }
 
   const pw = await bcrypt.hash('Test@123', 10);
 
@@ -58,18 +59,19 @@ async function run() {
     { name: 'Mariam Iftikhar',     email: 'mariam.iftikhar@student.nust.edu.pk',   role: 'student', department: 'SCME',  bio: 'Chemical engineering junior, research project on water purification. Member of NUST Literary Society.' },
   ];
 
-  const users = await User.insertMany(userData.map(u => ({
+  const users = userData.map(u => ({
+    id: randomUUID(),
     ...u,
-    password_hash: pw,
-    is_verified : true,
-    rating      : u.rating       || 0,
-    rating_count: u.rating_count || 0,
+    password_hash : pw,
+    is_verified   : true,
+    rating        : u.rating        || 0,
+    rating_count  : u.rating_count  || 0,
     sessions_count: u.sessions_count || 0,
-  })));
+  }));
+  await insert('users', users);
   console.log(`  Inserted ${users.length} users`);
 
-  // index helpers (1-based, mirrors the old SQL ID layout)
-  const u = (n) => users[n - 1]._id;
+  const u = (n) => users[n - 1].id;   // 1-based, mirrors the old SQL ID layout
 
   // ── Posts ──────────────────────────────────────────────────────────
   const postData = [
@@ -86,12 +88,13 @@ async function run() {
     { author_id: u(13), tag: 'Academic Help',        title: 'PHY-101 lab report format - what does a full-marks error analysis actually look like?', body: 'My TA said my error analysis lacks depth but I do not know what depth means here. I wrote the percentage error formula and plugged in numbers. What else is expected? Is there a standard format NUST TAs look for?', likes_count: 31, comments_count: 1, bookmarks_count: 44 },
     { author_id: u(5),  tag: 'Career & Internships', title: "CV mistakes that got NUST graduates rejected by Unilever and P&G - a recruiter's perspective", body: 'I screened over 400 NUST graduate CVs in the past year. Top five mistakes causing instant rejection: (1) Generic objective statement. (2) Listing societies without saying what you did. (3) No quantified achievements - "managed social media" is not a bullet, "grew Instagram followers 3x in 4 months" is. (4) GPA below 3.2 with nothing to offset it. (5) Two-page CVs with nothing worth a second page. Fix these first.', likes_count: 198, comments_count: 2, bookmarks_count: 87 },
   ];
-  const posts = await Post.insertMany(postData);
-  const p = (n) => posts[n - 1]._id;
+  const posts = postData.map(p => ({ id: randomUUID(), ...p }));
+  await insert('posts', posts);
+  const p = (n) => posts[n - 1].id;
   console.log(`  Inserted ${posts.length} posts`);
 
   // ── Replies ────────────────────────────────────────────────────────
-  await Reply.insertMany([
+  await insert('replies', [
     { post_id: p(1),  author_id: u(7),  text: 'Make a timetable and treat CS-101 lab and MTH-101 as completely separate study blocks. The first three weeks are the hardest before you find your rhythm. Form a study group of 3-4 people in week 1 - do not wait until you are falling behind. The SEECS senior batch shares notes through a departmental group, ask someone to add you.', likes_count: 31 },
     { post_id: p(1),  author_id: u(1),  text: 'Use MIT 6.001 on YouTube for CS-101 fundamentals - far better than reading the textbook alone. For MTH-101, Stewart Calculus Chapters 1-3 covers the entire first midterm. Study limits visually on Khan Academy first, then solve NUST past papers for exam technique. Past papers are more useful than any notes.', likes_count: 44 },
     { post_id: p(2),  author_id: u(4),  text: 'Quality notes. One addition: for dynamic programming, lecture content barely scratches what finals can ask. Use CLRS Chapter 15 alongside this. Classic problems like LCS, Knapsack, and Matrix Chain Multiplication have appeared in NUST CS-201 finals every year for the last four years.', likes_count: 27 },
@@ -117,26 +120,26 @@ async function run() {
   console.log('  Inserted replies');
 
   // ── Events ─────────────────────────────────────────────────────────
-  await Event.insertMany([
-    { organizer_id: u(11), title: 'NASCON 2026 - NUST Annual Student Competition',           description: "Pakistan's largest student computing competition. 340+ teams across speed programming, hackathon, robotics, gaming, and project showcase tracks.", venue: 'SEECS Building, H-12 Campus',     event_date: new Date('2026-03-14'), event_time: '09:00:00', category: 'Competition' },
-    { organizer_id: u(9),  title: 'NUST Sports Gala 2026',                                   description: 'Annual inter-school sports competition covering cricket, football, basketball, badminton, tennis, swimming, and athletics.',                                  venue: 'CIE Sports Complex, H-12',         event_date: new Date('2026-03-06'), event_time: '08:00:00', category: 'Sports' },
-    { organizer_id: u(1),  title: 'SEECS Open Source Day 2026',                              description: 'Full-day event where SEECS students present open source projects and run workshops on Git, GitHub, and contributing to major open source repositories.',          venue: 'SEECS Auditorium, H-12',           event_date: new Date('2026-04-05'), event_time: '10:00:00', category: 'Technical' },
-    { organizer_id: u(9),  title: 'IEEE NUST Annual General Body Meeting 2026',              description: 'IEEE NUST Student Branch AGM and committee elections for the 2026-27 academic year.',                                                                              venue: 'SEECS Conference Room, 3rd Floor', event_date: new Date('2026-04-12'), event_time: '15:00:00', category: 'Society' },
-    { organizer_id: u(9),  title: 'NUST Blood Drive 2026',                                   description: 'Annual blood donation campaign organized by IEEE NUST WIE in collaboration with PIMS Hospital Islamabad.',                                                          venue: 'CIE Sports Complex, H-12',         event_date: new Date('2026-04-30'), event_time: '09:00:00', category: 'Community' },
-    { organizer_id: u(10), title: 'NUST Job Fair 2026',                                      description: "One of Pakistan's largest campus recruitment events. 120+ companies across technology, finance, energy, FMCG, telecom, and consulting.",                            venue: 'CIE Sports Complex, H-12',         event_date: new Date('2026-05-06'), event_time: '09:00:00', category: 'Career' },
-    { organizer_id: u(7),  title: 'Scintilla 2026 - SEECS Annual Technical Symposium',       description: 'SEECS flagship technical event. Two days of project exhibitions, industry talks, hands-on workshops, and networking.',                                              venue: 'SEECS Building, H-12',             event_date: new Date('2026-05-13'), event_time: '09:00:00', category: 'Technical' },
-    { organizer_id: u(6),  title: 'NUST Formula Student 2026 - Public Demo Day',             description: 'Public demonstration of the FS26 electric race car built by the NUST Formula Student team over three years.',                                                       venue: 'SMME Courtyard, H-12 Campus',      event_date: new Date('2026-05-17'), event_time: '11:00:00', category: 'Technical' },
-    { organizer_id: u(3),  title: 'SEECS FYP Showcase 2026',                                 description: 'Annual showcase of BS and MS Final Year Projects from SEECS. 80+ projects across AI, cybersecurity, embedded systems, HCI, and networks.',                          venue: 'SEECS Seminar Hall, H-12',         event_date: new Date('2026-05-21'), event_time: '09:00:00', category: 'Academic' },
-    { organizer_id: u(15), title: 'NLS Annual Mushaira 2026',                                description: "NUST Literary Society's annual Urdu poetry night. Open mic for students, faculty readings, and guest poet performances.",                                          venue: 'CIE Main Lawn, H-12',              event_date: new Date('2026-05-24'), event_time: '18:00:00', category: 'Cultural' },
-    { organizer_id: u(2),  title: 'NBS Business Case Competition 2026',                      description: 'NBS annual case competition open to all business and management students. Total prize pool PKR 200,000.',                                                            venue: 'NBS Auditorium, H-12',             event_date: new Date('2026-05-28'), event_time: '10:00:00', category: 'Competition' },
-    { organizer_id: u(15), title: 'NUMUN 2026 - NUST Model United Nations',                  description: 'Three-day Model UN conference hosted by NUST. Fifteen committees covering international security, climate policy, economic development, and human rights.',          venue: 'Margalla Hall, H-12 Campus',       event_date: new Date('2026-06-06'), event_time: '08:00:00', category: 'Society' },
-    { organizer_id: u(3),  title: 'NUST Research Day 2026',                                  description: 'Annual showcase of ongoing faculty and graduate research across all NUST schools.',                                                                                  venue: 'NUST Main Lawn and Auditorium',    event_date: new Date('2026-06-12'), event_time: '10:00:00', category: 'Academic' },
-    { organizer_id: u(1),  title: 'E3 Summit 2026 - Entrepreneurship, Energy & Engineering', description: 'NUST annual entrepreneurship summit connecting student startups, venture capitalists, and industry leaders. Pitch competition with PKR 500,000 in funding prizes.', venue: 'CIE Auditorium, H-12',             event_date: new Date('2026-06-19'), event_time: '10:00:00', category: 'Career' },
+  await insert('events', [
+    { organizer_id: u(11), title: 'NASCON 2026 - NUST Annual Student Competition',           description: "Pakistan's largest student computing competition. 340+ teams across speed programming, hackathon, robotics, gaming, and project showcase tracks.", venue: 'SEECS Building, H-12 Campus',     event_date: '2026-03-14', event_time: '09:00:00', category: 'Competition' },
+    { organizer_id: u(9),  title: 'NUST Sports Gala 2026',                                   description: 'Annual inter-school sports competition covering cricket, football, basketball, badminton, tennis, swimming, and athletics.',                                  venue: 'CIE Sports Complex, H-12',         event_date: '2026-03-06', event_time: '08:00:00', category: 'Sports' },
+    { organizer_id: u(1),  title: 'SEECS Open Source Day 2026',                              description: 'Full-day event where SEECS students present open source projects and run workshops on Git, GitHub, and contributing to major open source repositories.',          venue: 'SEECS Auditorium, H-12',           event_date: '2026-04-05', event_time: '10:00:00', category: 'Technical' },
+    { organizer_id: u(9),  title: 'IEEE NUST Annual General Body Meeting 2026',              description: 'IEEE NUST Student Branch AGM and committee elections for the 2026-27 academic year.',                                                                              venue: 'SEECS Conference Room, 3rd Floor', event_date: '2026-04-12', event_time: '15:00:00', category: 'Society' },
+    { organizer_id: u(9),  title: 'NUST Blood Drive 2026',                                   description: 'Annual blood donation campaign organized by IEEE NUST WIE in collaboration with PIMS Hospital Islamabad.',                                                          venue: 'CIE Sports Complex, H-12',         event_date: '2026-04-30', event_time: '09:00:00', category: 'Community' },
+    { organizer_id: u(10), title: 'NUST Job Fair 2026',                                      description: "One of Pakistan's largest campus recruitment events. 120+ companies across technology, finance, energy, FMCG, telecom, and consulting.",                            venue: 'CIE Sports Complex, H-12',         event_date: '2026-05-06', event_time: '09:00:00', category: 'Career' },
+    { organizer_id: u(7),  title: 'Scintilla 2026 - SEECS Annual Technical Symposium',       description: 'SEECS flagship technical event. Two days of project exhibitions, industry talks, hands-on workshops, and networking.',                                              venue: 'SEECS Building, H-12',             event_date: '2026-05-13', event_time: '09:00:00', category: 'Technical' },
+    { organizer_id: u(6),  title: 'NUST Formula Student 2026 - Public Demo Day',             description: 'Public demonstration of the FS26 electric race car built by the NUST Formula Student team over three years.',                                                       venue: 'SMME Courtyard, H-12 Campus',      event_date: '2026-05-17', event_time: '11:00:00', category: 'Technical' },
+    { organizer_id: u(3),  title: 'SEECS FYP Showcase 2026',                                 description: 'Annual showcase of BS and MS Final Year Projects from SEECS. 80+ projects across AI, cybersecurity, embedded systems, HCI, and networks.',                          venue: 'SEECS Seminar Hall, H-12',         event_date: '2026-05-21', event_time: '09:00:00', category: 'Academic' },
+    { organizer_id: u(15), title: 'NLS Annual Mushaira 2026',                                description: "NUST Literary Society's annual Urdu poetry night. Open mic for students, faculty readings, and guest poet performances.",                                          venue: 'CIE Main Lawn, H-12',              event_date: '2026-05-24', event_time: '18:00:00', category: 'Cultural' },
+    { organizer_id: u(2),  title: 'NBS Business Case Competition 2026',                      description: 'NBS annual case competition open to all business and management students. Total prize pool PKR 200,000.',                                                            venue: 'NBS Auditorium, H-12',             event_date: '2026-05-28', event_time: '10:00:00', category: 'Competition' },
+    { organizer_id: u(15), title: 'NUMUN 2026 - NUST Model United Nations',                  description: 'Three-day Model UN conference hosted by NUST. Fifteen committees covering international security, climate policy, economic development, and human rights.',          venue: 'Margalla Hall, H-12 Campus',       event_date: '2026-06-06', event_time: '08:00:00', category: 'Society' },
+    { organizer_id: u(3),  title: 'NUST Research Day 2026',                                  description: 'Annual showcase of ongoing faculty and graduate research across all NUST schools.',                                                                                  venue: 'NUST Main Lawn and Auditorium',    event_date: '2026-06-12', event_time: '10:00:00', category: 'Academic' },
+    { organizer_id: u(1),  title: 'E3 Summit 2026 - Entrepreneurship, Energy & Engineering', description: 'NUST annual entrepreneurship summit connecting student startups, venture capitalists, and industry leaders. Pitch competition with PKR 500,000 in funding prizes.', venue: 'CIE Auditorium, H-12',             event_date: '2026-06-19', event_time: '10:00:00', category: 'Career' },
   ]);
   console.log('  Inserted events');
 
   // ── Resources ──────────────────────────────────────────────────────
-  await Resource.insertMany([
+  await insert('resources', [
     { uploader_id: u(11), title: 'CS-201 Data Structures & Algorithms - Complete Notes',      description: 'Full semester notes covering arrays, linked lists, stacks, queues, trees (BST, AVL, Heap), graphs (BFS/DFS/Dijkstra), hashing, and dynamic programming.', file_name: 'cs201_dsa_notes.pdf',         file_type: 'PDF',  file_size: 4718592,  category: 'Course Notes',  course_code: 'CS-201',  downloads_count: 312 },
     { uploader_id: u(13), title: 'MTH-101 Calculus - Past Papers Bundle (2020-2025)',         description: '5 years of MTH-101 midterm and final exams with fully worked solutions.', file_name: 'mth101_papers_2020_25.zip',   file_type: 'ZIP',  file_size: 18874368, category: 'Past Papers',   course_code: 'MTH-101', downloads_count: 589 },
     { uploader_id: u(7),  title: 'PHY-101 - Solved Problem Sets and Lab Report Guide',        description: 'Solved numericals from Halliday/Resnick aligned to the NUST PHY-101 syllabus.', file_name: 'phy101_problems_labs.pdf', file_type: 'PDF',  file_size: 6291456,  category: 'Course Notes',  course_code: 'PHY-101', downloads_count: 417 },
@@ -151,7 +154,7 @@ async function run() {
   console.log('  Inserted resources');
 
   // ── Ratings ────────────────────────────────────────────────────────
-  await Rating.insertMany([
+  await insert('ratings', [
     { rater_id: u(9),  mentor_id: u(1), score: 5, comment: 'Syed bhai spent two hours on a call walking me through my FYP architecture. Genuinely changed the direction of my project for the better. Best mentor I have had.' },
     { rater_id: u(10), mentor_id: u(2), score: 5, comment: "Aiman's case prep sessions are the real deal. She knows exactly what McKinsey Pakistan looks for. Got through to the final round because of her." },
     { rater_id: u(11), mentor_id: u(3), score: 5, comment: 'Areeba reviewed my research proposal and gave comments sharper than any professor feedback I have received. Essential for anyone going into research.' },
@@ -166,7 +169,7 @@ async function run() {
   console.log('  Inserted ratings');
 
   // ── Mentorship requests ────────────────────────────────────────────
-  await MentorshipRequest.insertMany([
+  await insert('mentorship_requests', [
     { requester_id: u(13), mentor_id: u(1), message: 'Assalamu alaikum. I am a SEECS freshman interested in cybersecurity long-term and struggling with CS-101 right now. Could you point me in the right direction for first year?', status: 'accepted' },
     { requester_id: u(14), mentor_id: u(2), message: 'I am a first-year NBS student interested in consulting. I would love guidance on what to focus on in the first two years to be competitive for firms like McKinsey later.',         status: 'pending'  },
     { requester_id: u(11), mentor_id: u(3), message: 'I want to apply for MS programs next year. My CGPA is 3.7 and I have one conference paper accepted. Would you be willing to review my research statement?',                       status: 'accepted' },
@@ -177,7 +180,7 @@ async function run() {
   console.log('  Inserted mentorship requests');
 
   // ── Messages ───────────────────────────────────────────────────────
-  await Message.insertMany([
+  await insert('messages', [
     { sender_id: u(13), receiver_id: u(1),  text: 'Assalamu alaikum sir! Just sent a mentorship request. I am struggling a lot with CS-101 this semester and would really value some guidance on where to start.', is_read: true },
     { sender_id: u(1),  receiver_id: u(13), text: 'Wa alaikum salam Rimsha! Accepted your request. CS-101 is genuinely hard in week 1 - it gets easier. Start with Python Tutor (pythontutor.com) to visualize every loop and recursion. I will send you a full resource list this evening.', is_read: true },
     { sender_id: u(13), receiver_id: u(1),  text: 'Thank you so much! I just made an account on Python Tutor and it is already helping a lot with understanding how loops work.', is_read: true },
@@ -190,8 +193,6 @@ async function run() {
   console.log('  Inserted messages');
 
   console.log('\n  Seed complete. All passwords are: Test@123\n');
-  await mongoose.connection.close();
-  process.exit(0);
 }
 
-run().catch(err => { console.error(err); process.exit(1); });
+run().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); });

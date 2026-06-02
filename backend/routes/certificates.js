@@ -3,13 +3,30 @@ const fs     = require('fs');
 const path   = require('path');
 
 const auth          = require('../middleware/auth');
-const User          = require('../models/User');
-const Resource      = require('../models/Resource');
-const Certificate   = require('../models/Certificate');
-const XpTransaction = require('../models/XpTransaction');
+const { supabase }  = require('../config/supabase');
 
 const { generateCertPDF, cleanupOldCertificates, CERT_DIR } = require('../services/certificateGenerator');
 const { getLevel, LEVELS, awardXP }                          = require('../services/xpManager');
+
+async function countResources(uid) {
+  const { count } = await supabase
+    .from('resources').select('id', { count: 'exact', head: true }).eq('uploader_id', uid);
+  return count || 0;
+}
+
+async function latestCertDate(uid) {
+  const { data } = await supabase
+    .from('certificates').select('created_at')
+    .eq('user_id', uid).order('created_at', { ascending: false }).limit(1).maybeSingle();
+  return data || null;
+}
+
+function makeCertNumber() {
+  const now     = new Date();
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  const rand    = String(Math.floor(10000 + Math.random() * 90000));
+  return `PB-NUST-${dateStr}-${rand}`;
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // GET /api/certificates/xp-stats   - profile dashboard data
@@ -17,13 +34,18 @@ const { getLevel, LEVELS, awardXP }                          = require('../servi
 router.get('/xp-stats', auth, async (req, res) => {
   try {
     const uid  = req.user.id;
-    const user = await User.findById(uid).select('role total_xp xp_level total_students_helped total_hours_helped rating department');
+    const { data: user } = await supabase
+      .from('users')
+      .select('role, total_xp, xp_level, total_students_helped, total_hours_helped, rating, department')
+      .eq('id', uid).maybeSingle();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const [resourcesCount, history, lastCert] = await Promise.all([
-      Resource.countDocuments({ uploader_id: uid }),
-      XpTransaction.find({ user_id: uid }).sort({ created_at: -1 }).limit(20).select('points reason ref_type created_at'),
-      Certificate.findOne({ user_id: uid }).sort({ created_at: -1 }).select('created_at'),
+    const [resourcesCount, { data: history }, lastCert] = await Promise.all([
+      countResources(uid),
+      supabase.from('xp_transactions')
+        .select('points, reason, ref_type, created_at')
+        .eq('user_id', uid).order('created_at', { ascending: false }).limit(20),
+      latestCertDate(uid),
     ]);
 
     const xp       = user.total_xp || 0;
@@ -60,7 +82,7 @@ router.get('/xp-stats', auth, async (req, res) => {
       rating               : user.rating,
       canGenerate          : isMentor && xp >= 500,
       cooldownEnd,
-      history,
+      history              : history || [],
     });
   } catch (err) {
     console.error(err);
@@ -74,12 +96,15 @@ router.get('/xp-stats', auth, async (req, res) => {
 router.post('/generate', auth, async (req, res) => {
   try {
     const uid  = req.user.id;
-    const user = await User.findById(uid).select('name role total_xp xp_level total_students_helped total_hours_helped rating department');
+    const { data: user } = await supabase
+      .from('users')
+      .select('name, role, total_xp, xp_level, total_students_helped, total_hours_helped, rating, department')
+      .eq('id', uid).maybeSingle();
     if (!user)                          return res.status(404).json({ error: 'User not found' });
     if (user.role !== 'mentor')         return res.status(403).json({ error: 'Only mentors can generate the Verified Mentor Certificate.' });
     if ((user.total_xp || 0) < 500)     return res.status(403).json({ error: 'You need at least 500 XP to generate a certificate.' });
 
-    const lastCert = await Certificate.findOne({ user_id: uid }).sort({ created_at: -1 }).select('created_at');
+    const lastCert = await latestCertDate(uid);
     if (lastCert) {
       const diff = Date.now() - new Date(lastCert.created_at).getTime();
       if (diff < 24 * 60 * 60 * 1000) {
@@ -88,17 +113,13 @@ router.post('/generate', auth, async (req, res) => {
       }
     }
 
-    const resourcesCount = await Resource.countDocuments({ uploader_id: uid });
+    const resourcesCount = await countResources(uid);
+    const certNumber     = makeCertNumber();
 
-    const now        = new Date();
-    const dateStr    = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const rand       = String(Math.floor(10000 + Math.random() * 90000));
-    const certNumber = `PB-NUST-${dateStr}-${rand}`;
-
-    const filePath     = await generateCertPDF({ ...user.toObject(), resources_count: resourcesCount }, certNumber);
+    const filePath     = await generateCertPDF({ ...user, resources_count: resourcesCount }, certNumber);
     const relativePath = `/certificates/${path.basename(filePath)}`;
 
-    await Certificate.create({
+    await supabase.from('certificates').insert({
       user_id       : uid,
       cert_number   : certNumber,
       xp_snapshot   : user.total_xp,
@@ -120,9 +141,10 @@ router.post('/generate', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.get('/download/:certNumber', auth, async (req, res) => {
   try {
-    const cert = await Certificate.findOne({ cert_number: req.params.certNumber });
-    if (!cert)                                 return res.status(404).json({ error: 'Certificate not found' });
-    if (cert.user_id.toString() !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+    const { data: cert } = await supabase
+      .from('certificates').select('*').eq('cert_number', req.params.certNumber).maybeSingle();
+    if (!cert)                            return res.status(404).json({ error: 'Certificate not found' });
+    if (cert.user_id !== req.user.id)     return res.status(403).json({ error: 'Forbidden' });
 
     const fp = path.join(CERT_DIR, `${cert.cert_number}.pdf`);
     if (!fs.existsSync(fp))
@@ -140,8 +162,10 @@ router.get('/download/:certNumber', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/test-add-xp', auth, async (req, res) => {
   try {
+    if (process.env.NODE_ENV === 'production') return res.status(403).json({ error: 'Not available' });
     await awardXP(req.user.id, 'Test XP (dev)', 100, null, null);
-    const user = await User.findById(req.user.id).select('total_xp xp_level');
+    const { data: user } = await supabase
+      .from('users').select('total_xp, xp_level').eq('id', req.user.id).maybeSingle();
     res.json({ total_xp: user.total_xp, xp_level: user.xp_level });
   } catch {
     res.status(500).json({ error: 'Failed to add test XP' });
@@ -158,21 +182,21 @@ router.post('/test-add-xp', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/test-regenerate', auth, async (req, res) => {
   try {
+    if (process.env.NODE_ENV === 'production') return res.status(403).json({ error: 'Not available' });
     const uid  = req.user.id;
-    const user = await User.findById(uid).select('name role total_xp xp_level total_students_helped total_hours_helped rating department');
+    const { data: user } = await supabase
+      .from('users')
+      .select('name, role, total_xp, xp_level, total_students_helped, total_hours_helped, rating, department')
+      .eq('id', uid).maybeSingle();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const resourcesCount = await Resource.countDocuments({ uploader_id: uid });
+    const resourcesCount = await countResources(uid);
+    const certNumber     = makeCertNumber();
 
-    const now        = new Date();
-    const dateStr    = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const rand       = String(Math.floor(10000 + Math.random() * 90000));
-    const certNumber = `PB-NUST-${dateStr}-${rand}`;
-
-    const filePath     = await generateCertPDF({ ...user.toObject(), resources_count: resourcesCount }, certNumber);
+    const filePath     = await generateCertPDF({ ...user, resources_count: resourcesCount }, certNumber);
     const relativePath = `/certificates/${path.basename(filePath)}`;
 
-    await Certificate.create({
+    await supabase.from('certificates').insert({
       user_id       : uid,
       cert_number   : certNumber,
       xp_snapshot   : user.total_xp,

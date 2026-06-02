@@ -1,8 +1,9 @@
 const router = require('express').Router();
 const multer = require('multer');
 
-const auth  = require('../middleware/auth');
-const Event = require('../models/Event');
+const auth          = require('../middleware/auth');
+const { supabase }  = require('../config/supabase');
+const { shapeEvent } = require('../data/shapers');
 const { makeStorage, fileUrl } = require('../config/storage');
 
 const upload = multer({
@@ -10,13 +11,12 @@ const upload = multer({
   limits : { fileSize: 10 * 1024 * 1024 },
 });
 
-function shape(e) {
-  const obj          = e.toObject ? e.toObject() : e;
-  obj.id             = obj._id.toString();
-  obj.organizer_id   = obj.organizer_id?._id ? obj.organizer_id._id.toString() : obj.organizer_id?.toString();
-  obj.organizer_name = obj.organizer && obj.organizer.name ? obj.organizer.name : obj.organizer_name;
-  obj.organizer_role = obj.organizer && obj.organizer.role ? obj.organizer.role : obj.organizer_role;
-  return obj;
+const EVENT_ORGANIZER = 'organizer:organizer_id(name,role)';
+
+// Local-time YYYY-MM-DD (parity with the old local-midnight Date filter).
+function todayLocalDate() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -27,31 +27,18 @@ router.get('/', auth, async (req, res) => {
     const { when = 'upcoming', upcoming, category } = req.query;
     const mode = upcoming === 'true' ? 'upcoming' : when;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStr = todayLocalDate();
 
-    const filter = {};
-    filter.event_date = mode === 'past' ? { $lt: today } : { $gte: today };
-    if (category) filter.category = category;
+    let q = supabase.from('events').select(`*, ${EVENT_ORGANIZER}`);
+    q = mode === 'past' ? q.lt('event_date', todayStr) : q.gte('event_date', todayStr);
+    if (category) q = q.eq('category', category);
 
-    const sortDir = mode === 'past' ? -1 : 1;
+    q = q.order('event_date', { ascending: mode !== 'past' }).limit(50);
 
-    const events = await Event.find(filter)
-      .sort({ event_date: sortDir })
-      .limit(50)
-      .populate({ path: 'organizer_id', select: 'name role', options: { lean: true } });
+    const { data: events, error } = await q;
+    if (error) throw error;
 
-    res.json(events.map(e => {
-      const obj = e.toObject();
-      const o   = obj.organizer_id || {};
-      return {
-        ...obj,
-        id            : obj._id.toString(),
-        organizer_id  : o._id ? o._id.toString() : obj.organizer_id,
-        organizer_name: o.name,
-        organizer_role: o.role,
-      };
-    }));
+    res.json((events || []).map(shapeEvent));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch events' });
@@ -68,30 +55,25 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
     if (!venue || !venue.trim()) return res.status(400).json({ error: 'Venue is required' });
     if (!event_date)             return res.status(400).json({ error: 'Date is required' });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (new Date(event_date) < today) return res.status(400).json({ error: 'Event date cannot be in the past' });
+    if (event_date < todayLocalDate()) return res.status(400).json({ error: 'Event date cannot be in the past' });
 
-    const created = await Event.create({
-      organizer_id: req.user.id,
-      title       : title.trim(),
-      description : description || null,
-      venue       : venue.trim(),
-      event_date  : new Date(event_date),
-      event_time  : event_time || null,
-      category    : category || 'Other',
-      image_path  : fileUrl(req.file),
-    });
+    const { data: event, error } = await supabase
+      .from('events')
+      .insert({
+        organizer_id: req.user.id,
+        title       : title.trim(),
+        description : description || null,
+        venue       : venue.trim(),
+        event_date,                         // 'YYYY-MM-DD' from <input type=date>
+        event_time  : event_time || null,
+        category    : category || 'Other',
+        image_path  : fileUrl(req.file),
+      })
+      .select(`*, ${EVENT_ORGANIZER}`)
+      .single();
+    if (error) throw error;
 
-    const event = await Event.findById(created._id).populate('organizer_id', 'name role');
-    const o     = event.organizer_id || {};
-    res.status(201).json({
-      ...event.toObject(),
-      id            : event._id.toString(),
-      organizer_id  : o._id ? o._id.toString() : event.organizer_id,
-      organizer_name: o.name,
-      organizer_role: o.role,
-    });
+    res.status(201).json(shapeEvent(event));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create event' });
@@ -103,12 +85,13 @@ router.post('/', auth, upload.single('image'), async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const e = await Event.findById(req.params.id);
+    const { data: e } = await supabase
+      .from('events').select('id, organizer_id').eq('id', req.params.id).maybeSingle();
     if (!e) return res.status(404).json({ error: 'Not found' });
-    if (e.organizer_id.toString() !== req.user.id && req.user.role !== 'admin')
+    if (e.organizer_id !== req.user.id && req.user.role !== 'admin')
       return res.status(403).json({ error: 'Forbidden' });
 
-    await e.deleteOne();
+    await supabase.from('events').delete().eq('id', req.params.id);
     res.json({ message: 'Deleted' });
   } catch {
     res.status(500).json({ error: 'Failed to delete event' });

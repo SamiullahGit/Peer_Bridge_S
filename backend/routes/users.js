@@ -1,23 +1,13 @@
-const router   = require('express').Router();
-const mongoose = require('mongoose');
+const router = require('express').Router();
 
-const auth               = require('../middleware/auth');
-const User               = require('../models/User');
-const Post               = require('../models/Post');
-const Rating             = require('../models/Rating');
-const MentorshipRequest  = require('../models/MentorshipRequest');
-const xpManager          = require('../services/xpManager');
+const auth          = require('../middleware/auth');
+const { supabase }  = require('../config/supabase');
+const xpManager     = require('../services/xpManager');
+const { PUBLIC_FIELDS, toSafeUser } = require('../data/shapers');
 
-const { ObjectId } = mongoose.Types;
-
-// Lightweight projection for any "list users" response.
-const PUBLIC_FIELDS = '_id name role department graduation_year bio profile_image rating rating_count sessions_count is_online is_locked is_under_review created_at total_xp xp_level email';
-
-function shapeUser(u) {
-  if (!u) return u;
-  const obj = u.toObject ? u.toObject() : u;
-  obj.id    = obj._id.toString();
-  return obj;
+// Make a free-text term safe for a PostgREST ilike / .or() filter.
+function likeTerm(s) {
+  return String(s).replace(/[%,()]/g, ' ').trim();
 }
 
 async function sendEmail(to, subject, text) {
@@ -31,22 +21,30 @@ async function sendEmail(to, subject, text) {
   await transporter.sendMail({ from: `"Peer Bridge" <${process.env.EMAIL_USER}>`, to, subject, text });
 }
 
-// ─────────────────────────────────────────────────────────────────────
+
 // GET /api/users/mentors?search=&dept=
-// ─────────────────────────────────────────────────────────────────────
+
 router.get('/mentors', auth, async (req, res) => {
   try {
     const { search, dept } = req.query;
-    const filter = { role: 'mentor', is_under_review: false };
+
+    let q = supabase
+      .from('users')
+      .select(PUBLIC_FIELDS)
+      .eq('role', 'mentor')
+      .eq('is_under_review', false);
 
     if (search) {
-      const re = new RegExp(search, 'i');
-      filter.$or = [{ name: re }, { department: re }, { bio: re }];
+      const s = likeTerm(search);
+      q = q.or(`name.ilike.%${s}%,department.ilike.%${s}%,bio.ilike.%${s}%`);
     }
-    if (dept) filter.department = dept;
+    if (dept) q = q.eq('department', dept);
 
-    const mentors = await User.find(filter).select(PUBLIC_FIELDS).sort({ rating: -1 });
-    res.json(mentors.map(shapeUser));
+    q = q.order('rating', { ascending: false });
+
+    const { data: mentors, error } = await q;
+    if (error) throw error;
+    res.json(mentors || []);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch mentors' });
@@ -56,8 +54,9 @@ router.get('/mentors', auth, async (req, res) => {
 // IDs of mentors the current user has already requested.
 router.get('/my-requests', auth, async (req, res) => {
   try {
-    const rows = await MentorshipRequest.find({ requester_id: req.user.id }).select('mentor_id');
-    res.json(rows.map(r => r.mentor_id.toString()));
+    const { data } = await supabase
+      .from('mentorship_requests').select('mentor_id').eq('requester_id', req.user.id);
+    res.json((data || []).map(r => r.mentor_id));
   } catch {
     res.status(500).json({ error: 'Failed to fetch requests' });
   }
@@ -66,20 +65,24 @@ router.get('/my-requests', auth, async (req, res) => {
 // Pending requests for the logged-in mentor.
 router.get('/incoming-requests', auth, async (req, res) => {
   try {
-    const rows = await MentorshipRequest.find({ mentor_id: req.user.id, status: 'pending' })
-      .sort({ created_at: -1 })
-      .populate('requester_id', 'name department role profile_image');
+    const { data, error } = await supabase
+      .from('mentorship_requests')
+      .select('id, message, status, created_at, requester:requester_id(id,name,department,role,profile_image)')
+      .eq('mentor_id', req.user.id)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
 
-    res.json(rows.map(r => ({
-      id            : r._id.toString(),
+    res.json((data || []).map(r => ({
+      id            : r.id,
       message       : r.message,
       status        : r.status,
       created_at    : r.created_at,
-      requester_id  : r.requester_id?._id?.toString(),
-      requester_name: r.requester_id?.name,
-      department    : r.requester_id?.department,
-      role          : r.requester_id?.role,
-      profile_image : r.requester_id?.profile_image,
+      requester_id  : r.requester?.id,
+      requester_name: r.requester?.name,
+      department    : r.requester?.department,
+      role          : r.requester?.role,
+      profile_image : r.requester?.profile_image,
     })));
   } catch {
     res.status(500).json({ error: 'Failed to fetch incoming requests' });
@@ -93,16 +96,18 @@ router.patch('/mentorship-requests/:id', auth, async (req, res) => {
     if (!['accepted', 'declined'].includes(status))
       return res.status(400).json({ error: 'Status must be accepted or declined' });
 
-    const reqDoc = await MentorshipRequest.findOneAndUpdate(
-      { _id: req.params.id, mentor_id: req.user.id },
-      { status },
-      { new: true },
-    );
+    const { data: reqDoc } = await supabase
+      .from('mentorship_requests')
+      .update({ status })
+      .eq('id', req.params.id)
+      .eq('mentor_id', req.user.id)
+      .select()
+      .maybeSingle();
     if (!reqDoc) return res.status(404).json({ error: 'Request not found' });
 
     if (status === 'accepted') {
-      const xp = await xpManager.awardXP(req.user.id, 'Accepted a mentorship request', 30, 'mentorship', reqDoc._id);
-      User.findByIdAndUpdate(req.user.id, { $inc: { total_students_helped: 1 } }).catch(() => {});
+      const xp = await xpManager.awardXP(req.user.id, 'Accepted a mentorship request', 30, 'mentorship', reqDoc.id);
+      supabase.rpc('adjust_counter', { p_table: 'users', p_id: req.user.id, p_column: 'total_students_helped', p_delta: 1 }).then(() => {}, () => {});
       return res.json({
         message  : `Request ${status}`,
         xp_earned: { points: 30, message: 'Mentorship goal completed!', newTotal: xp.newTotal, newLevel: xp.newLevel, levelUp: xp.levelUp },
@@ -116,9 +121,10 @@ router.patch('/mentorship-requests/:id', auth, async (req, res) => {
 
 // Current user (basic fields only - /api/auth/me returns the full doc).
 router.get('/me', auth, async (req, res) => {
-  const user = await User.findById(req.user.id).select(PUBLIC_FIELDS);
+  const { data: user } = await supabase
+    .from('users').select(PUBLIC_FIELDS).eq('id', req.user.id).maybeSingle();
   if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json(shapeUser(user));
+  res.json(user);
 });
 
 // Update current user's profile.
@@ -128,12 +134,22 @@ router.put('/me', auth, async (req, res) => {
     const update = {};
     if (name             !== undefined) update.name             = name;
     if (department       !== undefined) update.department       = department;
-    if (graduation_year  !== undefined) update.graduation_year  = graduation_year || null;
+    if (graduation_year  !== undefined) {
+      const gy = parseInt(graduation_year, 10);
+      update.graduation_year = Number.isNaN(gy) ? null : gy;
+    }
     if (bio              !== undefined) update.bio              = bio;
     if (role && ['student', 'mentor'].includes(role)) update.role = role;
 
-    const user = await User.findByIdAndUpdate(req.user.id, update, { new: true }).select(PUBLIC_FIELDS);
-    res.json(shapeUser(user));
+    if (Object.keys(update).length === 0) {
+      const { data: user } = await supabase
+        .from('users').select(PUBLIC_FIELDS).eq('id', req.user.id).maybeSingle();
+      return res.json(user);
+    }
+
+    const { data: user } = await supabase
+      .from('users').update(update).eq('id', req.user.id).select(PUBLIC_FIELDS).maybeSingle();
+    res.json(user);
   } catch {
     res.status(500).json({ error: 'Failed to update profile' });
   }
@@ -141,7 +157,7 @@ router.put('/me', auth, async (req, res) => {
 
 router.delete('/me', auth, async (req, res) => {
   try {
-    await User.findByIdAndDelete(req.user.id);
+    await supabase.from('users').delete().eq('id', req.user.id);
     res.json({ message: 'Account deleted' });
   } catch {
     res.status(500).json({ error: 'Failed to delete account' });
@@ -153,18 +169,19 @@ router.delete('/me', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.get('/:id', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select(PUBLIC_FIELDS);
+    // Fetch the user and their last 10 posts in parallel (one round-trip
+    // instead of two) - the posts result is simply discarded on 404.
+    const [{ data: user }, { data: posts }] = await Promise.all([
+      supabase.from('users').select(PUBLIC_FIELDS).eq('id', req.params.id).maybeSingle(),
+      supabase.from('posts')
+        .select('id, tag, title, body, likes_count, comments_count, bookmarks_count, is_hidden, created_at')
+        .eq('author_id', req.params.id)
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ]);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const posts = await Post.find({ author_id: req.params.id })
-      .sort({ created_at: -1 })
-      .limit(10)
-      .select('_id tag title body likes_count comments_count bookmarks_count is_hidden created_at');
-
-    res.json({
-      ...shapeUser(user),
-      posts: posts.map(p => ({ ...p.toObject(), id: p._id.toString() })),
-    });
+    res.json({ ...user, posts: posts || [] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch user' });
@@ -180,28 +197,25 @@ router.post('/:id/rate', auth, async (req, res) => {
     if (!score || score < 1 || score > 5) return res.status(400).json({ error: 'Score must be 1-5' });
     if (req.params.id === req.user.id)    return res.status(400).json({ error: 'Cannot rate yourself' });
 
-    await Rating.findOneAndUpdate(
-      { rater_id: req.user.id, mentor_id: req.params.id },
-      { score, comment: comment || null },
-      { upsert: true, setDefaultsOnInsert: true, new: true },
+    await supabase.from('ratings').upsert(
+      { rater_id: req.user.id, mentor_id: req.params.id, score, comment: comment || null },
+      { onConflict: 'rater_id,mentor_id' },
     );
 
-    // Recalculate average rating.
-    const stats = await Rating.aggregate([
-      { $match: { mentor_id: new ObjectId(req.params.id) } },
-      { $group: { _id: null, avg: { $avg: '$score' }, cnt: { $sum: 1 } } },
-    ]);
-    const avg = stats[0]?.avg || 0;
-    const cnt = stats[0]?.cnt || 0;
+    // Recalculate average rating (tiny N -> compute in JS for identical numbers).
+    const { data: scores } = await supabase
+      .from('ratings').select('score').eq('mentor_id', req.params.id);
+    const cnt = (scores || []).length;
+    const avg = cnt ? scores.reduce((a, r) => a + r.score, 0) / cnt : 0;
 
-    await User.findByIdAndUpdate(req.params.id, { rating: avg, rating_count: cnt });
+    await supabase.from('users').update({ rating: avg, rating_count: cnt }).eq('id', req.params.id);
 
     // Auto under-review: rating < 2.0 AND >= 5 reviews -> flag; improves -> unflag.
     if (avg < 2.0 && cnt >= 5) {
-      const mentor = await User.findById(req.params.id).select('email is_under_review');
+      const { data: mentor } = await supabase
+        .from('users').select('email, is_under_review').eq('id', req.params.id).maybeSingle();
       if (mentor && !mentor.is_under_review) {
-        mentor.is_under_review = true;
-        await mentor.save();
+        await supabase.from('users').update({ is_under_review: true }).eq('id', req.params.id);
         await sendEmail(
           mentor.email,
           'Your Peer Bridge mentor profile is under review',
@@ -209,7 +223,7 @@ router.post('/:id/rate', auth, async (req, res) => {
         );
       }
     } else if (avg >= 2.0) {
-      await User.findByIdAndUpdate(req.params.id, { is_under_review: false });
+      await supabase.from('users').update({ is_under_review: false }).eq('id', req.params.id);
     }
 
     // Passive XP for the mentor being rated - delivered via /xp/pending poll.
@@ -238,16 +252,17 @@ router.post('/:id/rate', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/promote-to-mentor', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const { data: user } = await supabase
+      .from('users').select('*').eq('id', req.user.id).maybeSingle();
     if (!user)                       return res.status(404).json({ error: 'User not found' });
     if (user.role === 'mentor')      return res.status(400).json({ error: 'You are already a mentor.' });
     if (user.role !== 'student')     return res.status(403).json({ error: 'Only student accounts can be promoted to mentor.' });
     if ((user.total_xp || 0) < 300)  return res.status(403).json({ error: 'You need at least 300 XP (Silver level) before becoming a mentor.' });
 
-    user.role = 'mentor';
-    await user.save();
+    const { data: updated } = await supabase
+      .from('users').update({ role: 'mentor' }).eq('id', req.user.id).select('*').maybeSingle();
 
-    res.json({ message: 'Welcome to the mentor community!', user: user.toSafeJSON() });
+    res.json({ message: 'Welcome to the mentor community!', user: toSafeUser(updated) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to promote to mentor' });
@@ -259,7 +274,7 @@ router.post('/promote-to-mentor', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/:id/request-mentorship', auth, async (req, res) => {
   try {
-    await MentorshipRequest.create({
+    await supabase.from('mentorship_requests').insert({
       requester_id: req.user.id,
       mentor_id   : req.params.id,
       message     : req.body.message || null,

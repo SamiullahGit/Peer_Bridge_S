@@ -3,7 +3,9 @@ const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
 const multer  = require('multer');
 
-const User                = require('../models/User');
+const { supabase }        = require('../config/supabase');
+const { NUST_DOMAINS }    = require('../data/constants');
+const { toSafeUser }      = require('../data/shapers');
 const authMw              = require('../middleware/auth');
 const { awardDailyLogin } = require('../services/xpManager');
 const { makeStorage, fileUrl } = require('../config/storage');
@@ -23,7 +25,7 @@ const avatarUpload = multer({
 // ── Helpers ────────────────────────────────────────────────────────
 function makeToken(user) {
   return jwt.sign(
-    { id: user._id.toString(), email: user.email, role: user.role },
+    { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: '7d' },
   );
@@ -64,12 +66,7 @@ async function sendOTPEmail(email, otp) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// POST /api/auth/send-otp   { email }
-// Creates a stub user (or refreshes the OTP for an existing one) and
-// emails a 6-digit code. In dev the OTP is also returned in the JSON
-// response and printed to the server console for easy testing.
-// ─────────────────────────────────────────────────────────────────────
+
 router.post('/send-otp', async (req, res) => {
   try {
     const { email } = req.body;
@@ -78,28 +75,34 @@ router.post('/send-otp', async (req, res) => {
     const clean  = email.trim().toLowerCase();
     const domain = clean.split('@')[1];
 
-    if (!domain || !User.NUST_DOMAINS.includes(domain)) {
+    if (!domain || !NUST_DOMAINS.includes(domain)) {
       return res.status(400).json({
         error: 'Only NUST institutional email addresses are allowed (@nust.edu.pk, @seecs.edu.pk, @nbs.nust.edu.pk, etc.).',
       });
     }
 
     const otp     = generateOTP();
-    const expires = new Date(Date.now() + 10 * 60 * 1000);   // 10 min
+    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();   // 10 min
 
-    const nameFromEmail = clean
-      .split('@')[0]
-      .replace(/[._-]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+    // Upsert by email, but preserve the existing name on returning users
+    // (parity with Mongo's $set + $setOnInsert).
+    const { data: existing } = await supabase
+      .from('users').select('id').eq('email', clean).maybeSingle();
 
-    await User.findOneAndUpdate(
-      { email: clean },
-      {
-        $set         : { otp_code: otp, otp_expires: expires },
-        $setOnInsert : { name: nameFromEmail, email: clean, is_verified: false },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
+    if (existing) {
+      await supabase.from('users')
+        .update({ otp_code: otp, otp_expires: expires })
+        .eq('id', existing.id);
+    } else {
+      const nameFromEmail = clean
+        .split('@')[0]
+        .replace(/[._-]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+      await supabase.from('users').insert({
+        name: nameFromEmail, email: clean, is_verified: false,
+        otp_code: otp, otp_expires: expires,
+      });
+    }
 
     await sendOTPEmail(clean, otp);
 
@@ -122,21 +125,21 @@ router.post('/verify-otp', async (req, res) => {
     if (!email || !otp) return res.status(400).json({ error: 'Email and OTP are required' });
 
     const clean = email.trim().toLowerCase();
-    const user  = await User.findOne({ email: clean });
+    const { data: user } = await supabase
+      .from('users').select('*').eq('email', clean).maybeSingle();
     if (!user)                                           return res.status(400).json({ error: 'User not found' });
     if (user.otp_code !== otp)                           return res.status(400).json({ error: 'Invalid OTP' });
-    if (!user.otp_expires || new Date() > user.otp_expires) return res.status(400).json({ error: 'OTP expired' });
+    if (!user.otp_expires || new Date() > new Date(user.otp_expires)) return res.status(400).json({ error: 'OTP expired' });
 
     const isNew = !user.department;
 
-    user.otp_code    = null;
-    user.otp_expires = null;
-    if (user.department && !user.is_verified) {
-      user.is_verified = true;
-    }
-    await user.save();
+    const update = { otp_code: null, otp_expires: null };
+    if (user.department && !user.is_verified) update.is_verified = true;
 
-    res.json({ token: makeToken(user), user: user.toSafeJSON(), is_new_user: isNew });
+    const { data: updated } = await supabase
+      .from('users').update(update).eq('id', user.id).select('*').maybeSingle();
+
+    res.json({ token: makeToken(updated), user: toSafeUser(updated), is_new_user: isNew });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Verification failed' });
@@ -155,20 +158,26 @@ router.post('/setup-profile', authMw, avatarUpload.single('profile_image'), asyn
 
     const safeRole = ['student', 'mentor'].includes(role) ? role : 'student';
 
-    const user = await User.findById(req.user.id);
+    const { data: user } = await supabase
+      .from('users').select('id').eq('id', req.user.id).maybeSingle();
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    user.name             = name;
-    user.department       = department || null;
-    user.graduation_year  = graduation_year || null;
-    user.role             = safeRole;
-    user.bio              = bio || null;
-    user.is_verified      = true;
-    if (password)        user.password_hash  = await bcrypt.hash(password, 10);
-    if (req.file)        user.profile_image  = fileUrl(req.file);
-    await user.save();
+    const gradYear = parseInt(graduation_year, 10);
+    const update = {
+      name,
+      department      : department || null,
+      graduation_year : Number.isNaN(gradYear) ? null : gradYear,
+      role            : safeRole,
+      bio             : bio || null,
+      is_verified     : true,
+    };
+    if (password) update.password_hash = await bcrypt.hash(password, 10);
+    if (req.file) update.profile_image = fileUrl(req.file);
 
-    res.json({ token: makeToken(user), user: user.toSafeJSON() });
+    const { data: updated } = await supabase
+      .from('users').update(update).eq('id', req.user.id).select('*').maybeSingle();
+
+    res.json({ token: makeToken(updated), user: toSafeUser(updated) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Profile setup failed' });
@@ -183,7 +192,8 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    const { data: user } = await supabase
+      .from('users').select('*').eq('email', email.trim().toLowerCase()).maybeSingle();
     if (!user || !user.password_hash) return res.status(401).json({ error: 'Invalid credentials' });
     if (!user.is_verified)            return res.status(401).json({ error: 'Account not verified' });
     if (user.is_locked)               return res.status(403).json({ error: 'Your account has been suspended due to community reports.' });
@@ -191,7 +201,7 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    res.json({ token: makeToken(user), user: user.toSafeJSON() });
+    res.json({ token: makeToken(user), user: toSafeUser(user) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed' });
@@ -202,11 +212,12 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me   - current user + opportunistic daily-login XP
 // ─────────────────────────────────────────────────────────────────────
 router.get('/me', authMw, async (req, res) => {
-  const user = await User.findById(req.user.id);
+  const { data: user } = await supabase
+    .from('users').select('*').eq('id', req.user.id).maybeSingle();
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const xp_earned = await awardDailyLogin(req.user.id);
-  const payload   = user.toSafeJSON();
+  const payload   = toSafeUser(user);
   if (xp_earned) payload.xp_earned = xp_earned;
   res.json(payload);
 });

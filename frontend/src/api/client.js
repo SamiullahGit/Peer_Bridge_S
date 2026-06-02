@@ -1,19 +1,10 @@
-// Thin wrapper around fetch() with shared auth + response handling.
-// Mirrors the `pb` object from the vanilla version so the API surface
-// (pb.get, pb.post, pb.put, pb.del, pb.upload) is identical.
 
-// In dev the Vite proxy forwards /api -> http://localhost:4000, so a
-// relative '/api' path is correct. In production the frontend is
-// served from a different origin than the backend (e.g. Vercel +
-// Render), so we read the absolute backend URL from VITE_API_BASE at
-// build time. Set it in Vercel's env vars to e.g.
-// "https://peerbridge-api.onrender.com/api".
 export const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 
 // Subscribers to xp_earned events from any pb.* call. The XpToastHost
 // component listens here so toasts fire automatically without each
-// page having to wire it up.
+
 const xpListeners = new Set();
 export function onXpEarned(fn)  { xpListeners.add(fn);    return () => xpListeners.delete(fn); }
 export function emitXpEarned(d) { xpListeners.forEach(fn => fn(d)); }
