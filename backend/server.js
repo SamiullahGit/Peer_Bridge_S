@@ -22,9 +22,13 @@ const app = express();
 
 // CORS: defaults to "*" for local dev; in production set CORS_ORIGIN to your
 // frontend URL(s), comma-separated (e.g. https://peer-bridge.vercel.app).
-const corsOrigin = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
-  : '*';
+// Note: "*" (or unset) must be passed to cors() as the literal string so it
+// allows all origins — wrapping it in an array would only match an origin
+// literally named "*".
+const corsRaw = (process.env.CORS_ORIGIN || '').trim();
+const corsOrigin = (!corsRaw || corsRaw === '*')
+  ? '*'
+  : corsRaw.split(',').map(s => s.trim());
 app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
