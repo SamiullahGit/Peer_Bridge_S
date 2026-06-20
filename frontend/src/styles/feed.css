@@ -310,19 +310,28 @@
 }
 
 @media (max-width: 960px) {
-  .feed, .feed-app { height: 100dvh; }
+  /* On mobile the 3-column dashboard stacks into one column. Stop trapping
+     everything inside a 100vh box with independently-scrolling columns -
+     that squished the feed when the right panel stacked below it. Instead
+     let the whole page flow and scroll naturally. */
+  .feed { height: auto; min-height: 100dvh; overflow: visible; }
   .feed-app,
   .feed-app.sidebar-collapsed,
   .feed-app.panel-hidden,
   .feed-app.sidebar-collapsed.panel-hidden {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto 1fr auto;
+    grid-template-rows: auto auto auto;
+    height: auto;
+    min-height: 100dvh;
   }
 
   .feed-topnav {
-    padding: 14px 16px;
+    position: sticky;
+    top: 0;
+    z-index: 18;
+    padding: 12px 14px;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 10px;
     align-items: center;
   }
 
@@ -395,11 +404,13 @@
   .feed-app.sidebar-collapsed .snav-signout-icon { display: none; }
 
   .feed-main {
+    overflow: visible;
     padding: 18px 16px 24px;
   }
 
   .right-panel {
     grid-column: 1;
+    overflow: visible;
     border-left: none;
     border-top: 1px solid #E4EAF2;
     padding: 16px;
@@ -410,28 +421,35 @@
 }
 
 @media (max-width: 700px) {
+  /* The panel flows below the feed on phones, so the desktop-oriented
+     "Hide panel" toggle is redundant here - hide it to keep the header tidy. */
+  .panel-mobile-btn { display: none; }
+
   .topnav-right {
     width: 100%;
     margin-left: 0;
-    justify-content: stretch;
+    gap: 8px;
+    justify-content: flex-end;
   }
 
-  .icon-btn,
-  .new-post-btn,
-  .panel-mobile-btn,
-  .user-chip {
-    flex: 1 1 calc(50% - 8px);
-    justify-content: center;
-  }
+  .new-post-btn { flex: 1; justify-content: center; }
+  .icon-btn { flex: 0 0 auto; }
 
   .user-chip {
+    flex: 0 0 auto;
     padding-right: 10px;
   }
 
-  .feed-tabs { padding: 8px; }
-  .feed-tabs .tab,
-  .feed-tabs .sort-btn { width: 100%; justify-content: center; }
-  .feed-tabs .sort-btn { margin-left: 0; }
+  /* Compact horizontal-scroll filter row instead of a tall vertical stack. */
+  .feed-tabs {
+    padding: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .feed-tabs::-webkit-scrollbar { display: none; }
+  .feed-tabs .tab { flex: 0 0 auto; }
+  .feed-tabs .sort-btn { flex: 0 0 auto; margin-left: 4px; }
 
   .composer {
     align-items: flex-start;
