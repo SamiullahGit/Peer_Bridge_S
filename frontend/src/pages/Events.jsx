@@ -4,6 +4,7 @@ import Sidebar    from '../components/Sidebar.jsx';
 import Avatar     from '../components/Avatar.jsx';
 import ToastHost, { toast }  from '../components/Toast.jsx';
 import { pb }     from '../api/client.js';
+import { EventCardSkeleton } from '../components/Skeleton.jsx';
 
 const CATS        = ['', 'Academic', 'Career', 'Society', 'Workshop', 'Other'];
 const CAT_COLORS  = {
@@ -13,6 +14,7 @@ const CAT_COLORS  = {
 
 export default function Events() {
   const [events, setEvents]       = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [catFilter, setCatFilter] = useState('');
   const [viewMode, setViewMode]   = useState('upcoming');     // 'upcoming' | 'past'
   const [openModal, setOpenModal] = useState(null);            // event object | null
@@ -24,8 +26,10 @@ export default function Events() {
   async function loadEvents() {
     const q = new URLSearchParams({ when: viewMode });
     if (catFilter) q.set('category', catFilter);
+    setLoading(true);
     try { setEvents(await pb.get('/events?' + q)); }
     catch { /* silent */ }
+    finally { setLoading(false); }
   }
 
   async function handleCreate(e) {
@@ -79,7 +83,9 @@ export default function Events() {
               <div className="tag tag-lav" style={{ marginBottom: 12 }}>Campus calendar</div>
               <h1 className="section-title">Events &amp; Societies</h1>
               <p className="section-subtitle">
-                {events.length} {viewMode === 'past' ? 'past' : 'upcoming'} event{events.length === 1 ? '' : 's'}
+                {loading
+                  ? 'Loading events…'
+                  : `${events.length} ${viewMode === 'past' ? 'past' : 'upcoming'} event${events.length === 1 ? '' : 's'}`}
               </p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -100,7 +106,9 @@ export default function Events() {
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 20,
         }}>
-          {events.length === 0 ? (
+          {loading ? (
+            [0, 1, 2, 3, 4, 5].map((i) => <EventCardSkeleton key={i} />)
+          ) : events.length === 0 ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
               <p>{viewMode === 'past' ? 'No past events to show.' : 'No upcoming events.'}</p>
             </div>

@@ -9,6 +9,7 @@ import { toast }         from '../components/Toast.jsx';
 
 import BridgeLogo        from '../components/BridgeLogo.jsx';
 import PostCard          from '../components/PostCard.jsx';
+import { PostCardSkeleton, PanelRowSkeleton } from '../components/Skeleton.jsx';
 import ComposerModal     from '../components/ComposerModal.jsx';
 import ChatOverlay       from '../components/ChatOverlay.jsx';
 import ReportModal       from '../components/ReportModal.jsx';
@@ -62,6 +63,7 @@ export default function Feed() {
   const [events, setEvents]     = useState([]);
   const [mentors, setMentors]   = useState([]);
   const [filter, setFilter]     = useState('For you');
+  const [loading, setLoading]   = useState(true);   // initial feed load
 
   // Per-post UI state
   const [openReplies, setOpenReplies] = useState({});   // postId -> true
@@ -132,6 +134,8 @@ export default function Feed() {
       setPosts(postsRes); setEvents(eventsRes); setMentors(mentorsRes);
     } catch (e) {
       toast('Failed to load feed: ' + e.message);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -362,7 +366,9 @@ export default function Feed() {
             </div>
           </div>
 
-          {filteredPosts.length === 0 ? (
+          {loading ? (
+            <>{[0, 1, 2, 3].map((i) => <PostCardSkeleton key={i} />)}</>
+          ) : filteredPosts.length === 0 ? (
             <div className="empty-state">
               <div className="empty-state-icon">
                 <svg width="28" height="28" viewBox="0 0 28 28" fill="none"
@@ -421,7 +427,9 @@ export default function Feed() {
               <div className="panel-card-title">Top mentors this week</div>
               <Link to="/mentors" className="see-all">See all</Link>
             </div>
-            {mentors.length === 0
+            {loading
+              ? [0, 1, 2, 3].map((i) => <PanelRowSkeleton key={i} />)
+              : mentors.length === 0
               ? <div className="empty-panel">No mentors found</div>
               : mentors.slice(0, 4).map((m) => (
                   <div key={m.id} className="mentor-row" onClick={() => setChatPeer({ id: m.id, name: m.name })}>
@@ -452,7 +460,9 @@ export default function Feed() {
               <div className="panel-card-title">Upcoming</div>
               <Link to="/events" className="see-all">See all</Link>
             </div>
-            {events.length === 0
+            {loading
+              ? [0, 1, 2].map((i) => <PanelRowSkeleton key={i} />)
+              : events.length === 0
               ? <div className="empty-panel">No upcoming events</div>
               : events.slice(0, 3).map((e) => {
                   const d = new Date(e.event_date);

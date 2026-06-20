@@ -3,19 +3,14 @@ const router = require('express').Router();
 const auth          = require('../middleware/auth');
 const { supabase }  = require('../config/supabase');
 const { REPORT_TYPES, REPORT_REASONS } = require('../data/constants');
+const { sendMail }  = require('../services/mailer');
 
 const VALID_TYPES   = REPORT_TYPES;
 const VALID_REASONS = REPORT_REASONS;
 
 async function sendEmail(to, subject, text) {
   console.log(`\n[DEV] Email to ${to}: ${subject}\n`);
-  if (process.env.NODE_ENV !== 'production') return;
-  const nodemailer  = require('nodemailer');
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  });
-  await transporter.sendMail({ from: `"Peer Bridge" <${process.env.EMAIL_USER}>`, to, subject, text });
+  await sendMail({ to, subject, text });
 }
 
 // Count reports for a given target.

@@ -24,12 +24,7 @@ export default function Landing() {
   const [modalEmail, setModalEmail] = useState('');
   const [infoKey,    setInfoKey]   = useState(null);   // 'about' | 'blog' | 'contact' | 'privacy' | 'terms' | 'support'
 
-  // Reveal-on-scroll animation for ".reveal" elements.
-  // NOTE: this useEffect MUST run on every render path, including the
-  // "already signed in" one, otherwise the hook order changes between
-  // the pre-login render (5 hooks) and the post-login render (4 hooks)
-  // and React throws "rendered fewer hooks than expected", which blanks
-  // the page. Keep the early return *below* every hook.
+  
   useEffect(() => {
     if (token) return; // nothing to observe; we're about to navigate away
     const obs = new IntersectionObserver((entries) => {

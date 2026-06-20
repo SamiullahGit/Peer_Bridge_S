@@ -6,12 +6,14 @@ import Avatar     from '../components/Avatar.jsx';
 import ToastHost  from '../components/Toast.jsx';
 import { toast }  from '../components/Toast.jsx';
 import { pb }     from '../api/client.js';
+import { MentorCardSkeleton } from '../components/Skeleton.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
 export default function Mentors() {
   const navigate                  = useNavigate();
   const [mentors, setMentors]     = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [searchVal, setSearchVal] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [requested, setRequested] = useState(new Set());
@@ -26,8 +28,10 @@ export default function Mentors() {
     const q = new URLSearchParams();
     if (searchVal)  q.set('search', searchVal);
     if (deptFilter) q.set('dept',   deptFilter);
+    setLoading(true);
     try { setMentors(await pb.get('/users/mentors?' + q)); }
     catch { toast('Failed to load mentors'); }
+    finally { setLoading(false); }
   }
 
   async function loadMyRequests() {
@@ -62,7 +66,7 @@ export default function Mentors() {
           <div style={{ position: 'relative', zIndex: 1 }}>
             <div className="tag tag-lav" style={{ marginBottom: 14 }}>Verified mentor directory</div>
             <h1 className="section-title">Find the right senior to guide you</h1>
-            <p className="section-subtitle">{mentors.length} mentors available across NUST departments.</p>
+            <p className="section-subtitle">{loading ? 'Loading mentors…' : `${mentors.length} mentors available across NUST departments.`}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 18 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260,
@@ -94,7 +98,9 @@ export default function Mentors() {
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
           gap: 20, marginTop: 22,
         }}>
-          {mentors.length === 0 ? (
+          {loading ? (
+            [0, 1, 2, 3, 4, 5].map((i) => <MentorCardSkeleton key={i} />)
+          ) : mentors.length === 0 ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
               <p>No mentors found yet. Try another search.</p>
             </div>

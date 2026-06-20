@@ -5,12 +5,14 @@ import Avatar     from '../components/Avatar.jsx';
 import ToastHost, { toast }  from '../components/Toast.jsx';
 import { pb, API_BASE } from '../api/client.js';
 import { formatFileSize } from '../utils/format.js';
+import { ResourceCardSkeleton } from '../components/Skeleton.jsx';
 
 const CATS        = ['', 'Past Papers', 'Course Notes', 'FYP Resources', 'Career Guide', 'Society Guide', 'Other'];
 const TYPE_ICONS  = { PDF: 'PDF', ZIP: 'ZIP', DOCX: 'DOC', XLSX: 'XLS', PPTX: 'PPT', PNG: 'PNG', JPG: 'JPG' };
 
 export default function Resources() {
   const [resources, setResources] = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [catFilter, setCatFilter] = useState('');
   const [searchVal, setSearchVal] = useState('');
   const [showUpload, setShowUpload] = useState(false);
@@ -23,8 +25,10 @@ export default function Resources() {
     const q = new URLSearchParams();
     if (catFilter) q.set('category', catFilter);
     if (searchVal) q.set('search',   searchVal);
+    setLoading(true);
     try { setResources(await pb.get('/resources?' + q)); }
     catch { /* silent */ }
+    finally { setLoading(false); }
   }
 
   function debounceSearch(v) {
@@ -108,7 +112,7 @@ export default function Resources() {
             <div>
               <div className="tag tag-lav" style={{ marginBottom: 12 }}>Shared learning vault</div>
               <h1 className="section-title">Resource Library</h1>
-              <p className="section-subtitle">{resources.length} resources shared by the community</p>
+              <p className="section-subtitle">{loading ? 'Loading resources…' : `${resources.length} resources shared by the community`}</p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {CATS.map((c) => (
@@ -125,7 +129,9 @@ export default function Resources() {
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))', gap: 18,
         }}>
-          {resources.length === 0 ? (
+          {loading ? (
+            [0, 1, 2, 3, 4, 5].map((i) => <ResourceCardSkeleton key={i} />)
+          ) : resources.length === 0 ? (
             <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
               <p>No resources found. Be the first to share!</p>
             </div>

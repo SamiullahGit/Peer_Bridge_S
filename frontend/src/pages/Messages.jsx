@@ -7,6 +7,7 @@ import { pb }       from '../api/client.js';
 import { useAuth }  from '../context/AuthContext.jsx';
 import { initialsOf, avatarColors } from '../utils/avatar.js';
 import { timeAgo }  from '../utils/time.js';
+import { ConvoItemSkeleton } from '../components/Skeleton.jsx';
 
 import '../styles/messages.css';
 
@@ -22,6 +23,7 @@ export default function Messages() {
   const initialName  = params.get('name') ? decodeURIComponent(params.get('name')) : '';
 
   const [convos, setConvos]     = useState([]);
+  const [convosLoading, setConvosLoading] = useState(true);
   const [activeId, setActiveId] = useState(initialId);
   const [activeName, setActiveName] = useState(initialName);
   const [msgs, setMsgs]         = useState([]);
@@ -57,6 +59,7 @@ export default function Messages() {
       }
       setConvos(next);
     } catch { /* silent */ }
+    finally { setConvosLoading(false); }
   }
 
   async function loadMsgs() {
@@ -109,7 +112,9 @@ export default function Messages() {
               </div>
             </div>
             <div className="convo-list-wrap">
-              {filteredConvos.length === 0
+              {convosLoading
+                ? [0, 1, 2, 3, 4].map((i) => <ConvoItemSkeleton key={i} />)
+                : filteredConvos.length === 0
                 ? <ConvoEmpty />
                 : filteredConvos.map((c) => (
                     <ConvoItem key={c.id} c={c} active={activeId === c.id}

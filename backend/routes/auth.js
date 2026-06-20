@@ -8,6 +8,7 @@ const { NUST_DOMAINS }    = require('../data/constants');
 const { toSafeUser }      = require('../data/shapers');
 const authMw              = require('../middleware/auth');
 const { awardDailyLogin } = require('../services/xpManager');
+const { sendMail }        = require('../services/mailer');
 const { makeStorage, fileUrl } = require('../config/storage');
 
 // ── Avatar upload (during profile setup) ───────────────────────────
@@ -36,33 +37,16 @@ function generateOTP() {
 }
 
 async function sendOTPEmail(email, otp) {
-  let sent = false;
-
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    const nodemailer  = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
-    try {
-      await transporter.sendMail({
-        from   : `"Peer Bridge" <${process.env.EMAIL_USER}>`,
-        to     : email,
-        subject: 'Your Peer Bridge verification code',
-        text   : `Your 6-digit code is: ${otp}\nExpires in 10 minutes.`,
-        html   : `<p>Your Peer Bridge verification code is:</p><h2>${otp}</h2><p>Expires in 10 minutes.</p>`,
-      });
-      sent = true;
-    } catch (err) {
-      console.error('[auth] Failed to send OTP email:', err.message);
-    }
-  } else {
-    console.warn('[auth] EMAIL_USER/EMAIL_PASS not set — falling back to console-only OTP delivery.');
-  }
+  const sent = await sendMail({
+    to     : email,
+    subject: 'Your Peer Bridge verification code',
+    text   : `Your 6-digit code is: ${otp}\nExpires in 10 minutes.`,
+    html   : `<p>Your Peer Bridge verification code is:</p><h2>${otp}</h2><p>Expires in 10 minutes.</p>`,
+  });
 
   if (!sent) {
     console.log(`\n[DEV] OTP for ${email}: ${otp}\n`);
-    console.warn('[auth] Falling back to console OTP delivery.');
+    console.warn('[auth] Email not sent (no provider configured or send failed) — OTP delivered to console only.');
   }
 }
 

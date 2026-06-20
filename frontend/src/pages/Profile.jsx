@@ -11,6 +11,7 @@ import { useAuth }   from '../context/AuthContext.jsx';
 import { roleLabel } from '../utils/role.js';
 import { timeAgo }   from '../utils/time.js';
 import { tagTone, linkifyHTML } from '../utils/format.js';
+import { ProfileSkeleton } from '../components/Skeleton.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
@@ -88,9 +89,7 @@ export default function Profile() {
   if (!profile) {
     return (
       <Sidebar active="profile">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-          <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-        </div>
+        <ProfileSkeleton />
       </Sidebar>
     );
   }
