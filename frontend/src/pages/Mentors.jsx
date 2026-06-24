@@ -70,7 +70,7 @@ export default function Mentors() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 18 }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260,
-                padding: '12px 14px', background: '#fff',
+                padding: '12px 14px', background: 'var(--card)',
                 border: '1.5px solid var(--line)', borderRadius: 16, boxShadow: 'var(--shadow-sm)',
               }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
@@ -180,7 +180,7 @@ function MentorCard({ m, isRequested, onProfile, onMessage, onConnect }) {
           {isRequested ? (
             <button className="btn btn-ghost" disabled
                     style={{ fontSize: 12, padding: '8px 12px',
-                             color: '#2563EB', borderColor: '#BFDBFE', cursor: 'default' }}>
+                             color: 'var(--blue)', borderColor: 'var(--blue-mid)', cursor: 'default' }}>
               ✓ Requested
             </button>
           ) : (

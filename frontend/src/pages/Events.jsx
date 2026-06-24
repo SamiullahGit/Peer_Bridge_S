@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTheme } from '../context/ThemeContext.jsx';
 
 import Sidebar    from '../components/Sidebar.jsx';
 import Avatar     from '../components/Avatar.jsx';
@@ -10,6 +11,10 @@ const CATS        = ['', 'Academic', 'Career', 'Society', 'Workshop', 'Other'];
 const CAT_COLORS  = {
   Academic: '#c7d9ff', Career: '#fde8f0', Society: '#d4f1e3',
   Workshop: '#ffe4cc', Other: '#e9d7fb',
+};
+const CAT_COLORS_DARK = {
+  Academic: '#0f1a2b', Career: '#1c0d14', Society: '#0a1912',
+  Workshop: '#1a1008', Other: '#130a1f',
 };
 
 export default function Events() {
@@ -179,9 +184,11 @@ function CreateEventModal({ creating, onSubmit, onClose }) {
 }
 
 function ViewToggle({ mode, onChange }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   return (
     <div role="tablist" aria-label="Show events" style={{
-      display: 'inline-flex', background: '#f1f5f9',
+      display: 'inline-flex', background: isDark ? 'var(--bg-2)' : '#f1f5f9',
       border: '1px solid var(--line)', borderRadius: 999, padding: 3, gap: 2,
     }}>
       {[
@@ -195,9 +202,9 @@ function ViewToggle({ mode, onChange }) {
             role="tab" aria-selected={active}
             onClick={() => onChange(key)}
             style={{
-              border: 'none', background: active ? '#fff' : 'transparent',
+              border: 'none', background: active ? 'var(--card)' : 'transparent',
               font: 'inherit', fontSize: 12.5, fontWeight: 600,
-              color: active ? '#2563eb' : 'var(--ink-2)',
+              color: active ? 'var(--blue)' : 'var(--ink-2)',
               padding: '7px 16px', borderRadius: 999, cursor: 'pointer',
               boxShadow: active ? '0 1px 4px rgba(15,23,42,.08)' : 'none',
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -210,17 +217,19 @@ function ViewToggle({ mode, onChange }) {
 }
 
 function EventCard({ e, viewMode, onClick }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const d        = new Date(e.event_date);
   const month    = d.toLocaleString('en', { month: 'short' }).toUpperCase();
   const day      = d.getDate();
-  const bg       = CAT_COLORS[e.category] || '#e9d7fb';
+  const bg       = (isDark ? CAT_COLORS_DARK : CAT_COLORS)[e.category] || (isDark ? '#130a1f' : '#e9d7fb');
   const isPast   = viewMode === 'past';
 
   return (
     <div
       onClick={onClick}
       style={{
-        background: '#fff', border: '1px solid var(--line)',
+        background: 'var(--card)', border: '1px solid var(--line)',
         borderRadius: 'var(--radius-lg)', overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)', cursor: 'pointer', position: 'relative',
         opacity: isPast ? 0.82 : 1,
@@ -330,6 +339,8 @@ function ClockIcon() {
 }
 
 function EventModal({ event, onClose }) {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   return (
     <div
       style={{
@@ -340,8 +351,8 @@ function EventModal({ event, onClose }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        background: 'white', borderRadius: 18, maxWidth: 600, width: '100%',
-        boxShadow: '0 8px 32px rgba(0,0,0,.18)', overflow: 'hidden',
+        background: 'var(--card)', borderRadius: 18, maxWidth: 600, width: '100%',
+        boxShadow: 'var(--shadow-lg)', overflow: 'hidden', border: '1px solid var(--line)',
       }}>
         {event.image_path
           ? (
@@ -357,7 +368,7 @@ function EventModal({ event, onClose }) {
           )
           : (
             <div style={{
-              background: CAT_COLORS[event.category] || '#e9d7fb',
+              background: (isDark ? CAT_COLORS_DARK : CAT_COLORS)[event.category] || (isDark ? '#130a1f' : '#e9d7fb'),
               padding: '20px 22px', display: 'flex', alignItems: 'center', gap: 16,
             }}>
               <div style={{ textAlign: 'center', minWidth: 52 }}>

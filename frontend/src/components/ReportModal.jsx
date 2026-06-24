@@ -27,10 +27,10 @@ export default function ReportModal({ targetType, targetId, onClose }) {
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box" style={{ maxWidth: 420 }}>
         <div style={{
-          padding: '18px 22px', borderBottom: '1.5px solid #E4EAF2',
+          padding: '18px 22px', borderBottom: '1.5px solid var(--line)',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: '#0D1B2A' }}>Report content</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--ink)' }}>Report content</div>
           <button className="modal-close-btn" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
                  stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -39,7 +39,7 @@ export default function ReportModal({ targetType, targetId, onClose }) {
           </button>
         </div>
         <div style={{ padding: 22 }}>
-          <p style={{ fontSize: 13.5, color: '#4B5C73', marginBottom: 16 }}>Why are you reporting this?</p>
+          <p style={{ fontSize: 13.5, color: 'var(--ink-2)', marginBottom: 16 }}>Why are you reporting this?</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
             {REASONS.map((r) => {
               const active = r === reason;
@@ -50,9 +50,9 @@ export default function ReportModal({ targetType, targetId, onClose }) {
                   style={{
                     flex: 1, padding: '9px 6px', borderRadius: 9,
                     fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    border: `1.5px solid ${active ? '#0D1B2A' : '#E4EAF2'}`,
-                    background: active ? '#0D1B2A' : 'transparent',
-                    color    : active ? 'white' : '#4B5C73',
+                    border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
+                    background: active ? 'var(--ink)' : 'transparent',
+                    color    : active ? 'white' : 'var(--ink-2)',
                   }}
                 >{r}</button>
               );

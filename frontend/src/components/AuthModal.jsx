@@ -28,7 +28,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
   const { setAuth }      = useAuth();
 
   const [step, setStep]      = useState('email');     // email | otp | profile | done
-  const [pwMode, setPwMode]  = useState(false);
+  const [pwMode, setPwMode]  = useState(true);
   const [email, setEmail]    = useState(initialEmail);
   const [pw, setPw]          = useState('');
   const [otp, setOtp]        = useState(['', '', '', '', '', '']);
@@ -193,12 +193,6 @@ function EmailStep({ email, setEmail, pw, setPw, pwMode, setPwMode, loading, han
           />
           <button onClick={handlePwLogin} className="lp-big-btn">{loading ? <Spinner /> : 'Sign in -->'}</button>
         </div>
-        <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#8899B0' }}>
-          <a href="#" onClick={(e) => { e.preventDefault(); setPwMode(false); }}
-             style={{ color: '#2563EB', fontWeight: 600, textDecoration: 'none' }}>
-            Use email code instead
-          </a>
-        </div>
       </>
     );
   }
@@ -224,13 +218,6 @@ function EmailStep({ email, setEmail, pw, setPw, pwMode, setPwMode, loading, han
           </div>
         </div>
         <button onClick={handleEmailSubmit} className="lp-big-btn">{loading ? <Spinner /> : 'Send code -->'}</button>
-      </div>
-      <div style={{ textAlign: 'center', marginTop: 14, fontSize: 13, color: '#8899B0' }}>
-        Already have a password?{' '}
-        <a href="#" onClick={(e) => { e.preventDefault(); setPwMode(true); }}
-           style={{ color: '#2563EB', fontWeight: 600, textDecoration: 'none' }}>
-          Sign in with password
-        </a>
       </div>
     </>
   );
