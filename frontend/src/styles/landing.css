@@ -96,7 +96,7 @@
 .landing .stat-l      { font-size: 13.5px; color: var(--lp-slate); margin-top: 6px; }
 
 .landing .cta-section { position: relative; overflow: hidden; min-height: 380px; display: flex; align-items: center; justify-content: center; text-align: center; }
-.landing .cta-bg      { position: absolute; inset: 0; background-color: #0D1B2A; background-image: url('student.jpeg'); background-size: cover; background-position: center 40%; filter: brightness(.3) saturate(.7); }
+.landing .cta-bg      { position: absolute; inset: 0; background-color: #0D1B2A; background-image: url('/student.jpeg'); background-size: cover; background-position: center 40%; filter: brightness(.3) saturate(.7); }
 .landing .cta-content { position: relative; z-index: 2; padding: 80px 32px; }
 .landing .cta-h       { font-family: 'Playfair Display', serif; font-size: clamp(32px, 4vw, 50px); font-weight: 700; color: white; line-height: 1.12; margin-bottom: 16px; }
 .landing .cta-h em    { font-style: normal; color: #93C5FD; }
