@@ -12,6 +12,8 @@ import { roleLabel } from '../utils/role.js';
 import { timeAgo }   from '../utils/time.js';
 import { tagTone, linkifyHTML } from '../utils/format.js';
 import { ProfileSkeleton } from '../components/Skeleton.jsx';
+import VerifiedTick, { isVerified } from '../components/VerifiedTick.jsx';
+import FollowListModal from '../components/FollowListModal.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
@@ -31,8 +33,24 @@ export default function Profile() {
   const [rateComment, setRateComment] = useState('');
 
   const [showReport, setShowReport] = useState(false);
+  const [followModal, setFollowModal] = useState(null);   // 'followers' | 'following' | null
 
   useEffect(() => { loadProfile(); /* eslint-disable-next-line */ }, [profileId]);
+
+  async function toggleFollow() {
+    // Optimistic update; reload from server on failure.
+    setProfile((prev) => ({
+      ...prev,
+      is_following   : !prev.is_following,
+      followers_count: Math.max(0, (prev.followers_count || 0) + (prev.is_following ? -1 : 1)),
+    }));
+    try {
+      await pb.post(`/users/${profileId}/follow`);
+    } catch (e) {
+      toast('Failed to update follow');
+      loadProfile();
+    }
+  }
 
   async function loadProfile() {
     try {
@@ -137,6 +155,9 @@ export default function Profile() {
                     onMessage={() => navigate(`/messages?to=${p.id}&name=${encodeURIComponent(p.name)}`)}
                     onRate={() => setShowRate(true)}
                     onReport={() => setShowReport(true)}
+                    onFollow={toggleFollow}
+                    onShowFollowers={() => setFollowModal('followers')}
+                    onShowFollowing={() => setFollowModal('following')}
                   />}
             </div>
           </div>
@@ -179,19 +200,42 @@ export default function Profile() {
           onClose={() => setShowReport(false)}
         />
       )}
+
+      {followModal && (
+        <FollowListModal
+          userId={profileId}
+          mode={followModal}
+          onClose={() => setFollowModal(null)}
+          onOpenProfile={(id) => navigate(`/profile?id=${id}`)}
+        />
+      )}
     </Sidebar>
   );
 }
 
 /* ── Sub-components ──────────────────────────────────────────────── */
 
-function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport }) {
+function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing }) {
+  const statBtn = {
+    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+    font: 'inherit', fontSize: 13.5, color: 'var(--ink-2)',
+  };
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>{p.name}</h1>
+          {isVerified(p) && <VerifiedTick size={20} />}
           <VerifiedBadge p={p} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+          <button type="button" onClick={onShowFollowers} style={statBtn}>
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.followers_count || 0}</strong> followers
+          </button>
+          <button type="button" onClick={onShowFollowing} style={statBtn}>
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.following_count || 0}</strong> following
+          </button>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <span className="tag tag-lav">{roleLabel(p.role)}</span>
@@ -217,9 +261,18 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport }
           : <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)', fontStyle: 'italic' }}>No bio yet.</p>}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {isSelf
-          ? <button className="btn btn-ghost" onClick={onEdit} style={{ padding: '10px 16px', fontSize: 13.5 }}>Edit profile</button>
-          : <button className="btn btn-primary" onClick={onMessage} style={{ padding: '10px 16px', fontSize: 13.5 }}>Message</button>}
+        {isSelf ? (
+          <button className="btn btn-ghost" onClick={onEdit} style={{ padding: '10px 16px', fontSize: 13.5 }}>Edit profile</button>
+        ) : (
+          <>
+            <button
+              className={`btn ${p.is_following ? 'btn-ghost' : 'btn-primary'}`}
+              onClick={onFollow}
+              style={{ padding: '10px 16px', fontSize: 13.5 }}
+            >{p.is_following ? '✓ Following' : '+ Follow'}</button>
+            <button className="btn btn-ghost" onClick={onMessage} style={{ padding: '10px 16px', fontSize: 13.5 }}>Message</button>
+          </>
+        )}
         {!isSelf && isMentor && !p.is_locked && (
           <button className="btn btn-ghost" onClick={onRate} style={{ padding: '10px 16px', fontSize: 13.5 }}>Rate mentor</button>
         )}
