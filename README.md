@@ -2,6 +2,7 @@
 
 Full-stack rewrite of the original vanilla-JS / MySQL PeerBridge into the MERN stack:
 
+
 | Layer    | Tech                                  |
 | -------- | ------------------------------------- |
 | Frontend | **React** 18 + Vite + React Router 6  |
