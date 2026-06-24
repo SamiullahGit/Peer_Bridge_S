@@ -3,7 +3,9 @@ import { Link, useNavigate }            from 'react-router-dom';
 
 import { pb }            from '../api/client.js';
 import { useAuth }       from '../context/AuthContext.jsx';
-import { initialsOf }    from '../utils/avatar.js';
+import { useNotifications } from '../context/NotificationContext.jsx';
+import { useTheme }      from '../context/ThemeContext.jsx';
+import { initialsOf, avatarColors } from '../utils/avatar.js';
 import { roleLabel }     from '../utils/role.js';
 import { toast }         from '../components/Toast.jsx';
 
@@ -52,6 +54,8 @@ export default function Feed() {
   const { user: me, logout } = useAuth();
   const navigate             = useNavigate();
   const isMentor             = me?.role === 'mentor';
+  const { convos, unreadMsgs, markMsgsRead } = useNotifications();
+  const { theme, toggle: toggleTheme } = useTheme();
 
   // Layout state
   const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem('pb_sidebar') === 'collapsed');
@@ -72,6 +76,7 @@ export default function Feed() {
   // Modals
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerTag,  setComposerTag]  = useState('Academic Help');
+  const [composerAnon, setComposerAnon] = useState(false);
   const [chatPeer,     setChatPeer]     = useState(null);
   const [reportTarget, setReportTarget] = useState(null);   // { type, id }
   const [requestsOpen, setRequestsOpen] = useState(false);
@@ -155,6 +160,25 @@ export default function Feed() {
     }, 400);
   }
 
+  async function deletePost(id) {
+    try {
+      await pb.del(`/posts/${id}`);
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      toast(e.message || 'Failed to delete post');
+    }
+  }
+
+  async function updatePost(id, fields) {
+    try {
+      const updated = await pb.patch(`/posts/${id}`, fields);
+      setPosts((prev) => prev.map((p) => p.id === id ? { ...p, ...updated } : p));
+    } catch (e) {
+      toast(e.message || 'Failed to update post');
+      throw e;
+    }
+  }
+
   async function toggleLike(id) {
     setPosts((prev) => prev.map((p) => p.id === id
       ? { ...p, liked: !p.liked, likes_count: p.likes_count + (p.liked ? -1 : 1) }
@@ -212,8 +236,9 @@ export default function Feed() {
       .then(() => toast('Link copied!'));
   }
 
-  function openComposer(tag) {
+  function openComposer(tag, anon = false) {
     setComposerTag(tag || 'Academic Help');
+    setComposerAnon(anon);
     setComposerOpen(true);
   }
 
@@ -282,19 +307,27 @@ export default function Feed() {
           </div>
 
           <div className="topnav-right">
-            <Link to="/messages" className="icon-btn">
-              <svg width="17" height="17" viewBox="0 0 17 17" fill="none"
-                   stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <path d="M14.5 10.5a1 1 0 01-1 1H4L1 14.5V3a1 1 0 011-1h11.5a1 1 0 011 1v7.5z" />
-              </svg>
-            </Link>
+            <NotificationBell convos={convos} unreadMsgs={unreadMsgs} onNavigate={navigate} onMarkRead={markMsgsRead} />
 
-            <button className="new-post-btn" onClick={() => openComposer()}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
-                   stroke="white" strokeWidth="2" strokeLinecap="round">
-                <path d="M7 2v10M2 7h10" />
-              </svg>
-              New post
+            {/* Theme toggle — icon only, lives in the topnav */}
+            <button
+              className="icon-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="12" cy="12" r="5"/>
+                  <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              )}
             </button>
 
             <button className="panel-mobile-btn" onClick={() => setPanelHidden((hidden) => !hidden)}>
@@ -321,13 +354,17 @@ export default function Feed() {
         <FeedSidebar
           isMentor={isMentor}
           requestsCount={requests.length}
+          unreadMsgs={unreadMsgs}
           onToggle={toggleSidebar}
           onLogout={logout}
           onOpenRequests={() => setRequestsOpen(true)}
+          onMarkMsgsRead={markMsgsRead}
           me={me}
           initials={initials}
           mobileNavOpen={mobileNavOpen}
           onNavigate={closeMobileNav}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
 
         {/* ── Main feed ─────────────────────────────────────── */}
@@ -349,20 +386,40 @@ export default function Feed() {
             </button>
           </div>
 
-          <div className="composer" onClick={() => openComposer()}>
-            {me?.profile_image
-              ? <img src={me.profile_image} alt={me.name}
-                     style={{ width: 38, height: 38, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-              : <div style={{
-                  width: 38, height: 38, borderRadius: '50%',
-                  background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
-                }}>{initials}</div>}
-            <input type="text" placeholder="Ask a question, share a resource, or post an update…" readOnly />
-            <div className="composer-actions" onClick={(e) => e.stopPropagation()}>
-              <button className="comp-btn" onClick={() => openComposer('Academic Help')}>Ask</button>
-              <button className="comp-btn" onClick={() => openComposer('Resources')}>Share</button>
+          <div className="composer-card">
+            <div className="composer-top" onClick={() => openComposer()}>
+              {me?.profile_image
+                ? <img src={me.profile_image} alt={me.name}
+                       style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
+                  }}>{initials}</div>}
+              <span className="composer-placeholder">What's on your mind? Ask or share something…</span>
+            </div>
+            <div className="composer-bottom">
+              <button className="composer-action-btn" onClick={() => openComposer('Academic Help')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Ask
+              </button>
+              <button className="composer-action-btn" onClick={() => openComposer('Career & Internships')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+                Career
+              </button>
+              <button className="composer-action-btn" onClick={() => openComposer('Resources')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Resource
+              </button>
+              <button className="composer-action-btn" onClick={() => openComposer('Events & Societies')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                Event
+              </button>
+              <button className="composer-action-btn composer-action-anon" onClick={() => openComposer('Academic Help', true)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Anonymous
+              </button>
             </div>
           </div>
 
@@ -407,6 +464,8 @@ export default function Feed() {
                 onReport={(type, id) => setReportTarget({ type, id })}
                 onShare={shareLink}
                 onProfileClick={(id) => navigate(`/profile?id=${id}`)}
+                onDelete={deletePost}
+                onUpdate={updatePost}
               />
             ))
           )}
@@ -502,6 +561,7 @@ export default function Feed() {
       {composerOpen && (
         <ComposerModal
           initialTag={composerTag}
+          initialAnon={composerAnon}
           onClose={() => setComposerOpen(false)}
           onCreated={(post) => setPosts((prev) => [post, ...prev])}
         />
@@ -535,7 +595,7 @@ export default function Feed() {
 
 /* ── Inline sidebar (uses .snav classes from shared.css) ─────────── */
 
-function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenRequests, me, initials, mobileNavOpen, onNavigate }) {
+function FeedSidebar({ isMentor, requestsCount, unreadMsgs, onToggle, onLogout, onOpenRequests, onMarkMsgsRead, me, initials, mobileNavOpen, onNavigate, theme, onToggleTheme }) {
   return (
     <nav className={`snav${mobileNavOpen ? ' mobile-open' : ''}`}>
       <button className="snav-pin-btn" onClick={onToggle} title="Toggle sidebar">
@@ -552,7 +612,8 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
       <FeedNavLink to="/mentors"   label="Mentors" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>} />
       <FeedNavLink to="/resources" label="Resources" onNavigate={onNavigate} icon={<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z" />} />
       <FeedNavLink to="/events"    label="Events" onNavigate={onNavigate} icon={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>} />
-      <FeedNavLink to="/messages"  label="Messages" onNavigate={onNavigate} icon={<path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" />} />
+      <FeedNavLink to="/messages"  label="Messages" badge={unreadMsgs} onNavigate={() => { onNavigate(); onMarkMsgsRead(); }} icon={<path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" />} />
+      <FeedNavLink to="/groups"    label="Study Groups" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></>} />
       <FeedNavLink to="/saved"     label="Saved" onNavigate={onNavigate} icon={<path d="M5 3h12v18l-6-4-6 4V3Z" />} />
 
       {isMentor && (
@@ -615,7 +676,87 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
   );
 }
 
-function FeedNavLink({ to, label, icon, active = false, onNavigate }) {
+/* ── Notification bell (topnav) ─────────────────────────────────── */
+
+function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  const unreadConvos = convos.filter(c => c.unread > 0);
+
+  // Close dropdown when clicking outside.
+  useEffect(() => {
+    function onDown(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, []);
+
+  function goToConvo(c) {
+    setOpen(false);
+    onMarkRead();
+    onNavigate(`/messages?to=${c.id}&name=${encodeURIComponent(c.name)}`);
+  }
+
+  function goToAllMessages() {
+    setOpen(false);
+    onMarkRead();
+    onNavigate('/messages');
+  }
+
+  return (
+    <div className="notif-bell-wrap" ref={wrapRef}>
+      <button className="notif-bell-btn" onClick={() => setOpen(o => !o)} title="Notifications">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {unreadMsgs > 0 && (
+          <span className="notif-bell-badge">{unreadMsgs > 9 ? '9+' : unreadMsgs}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className="notif-dropdown">
+          <div className="notif-dropdown-head">
+            <span className="notif-dropdown-title">Notifications</span>
+            {unreadMsgs > 0 && (
+              <span style={{ fontSize: 11, color: '#8899B0' }}>{unreadMsgs} unread</span>
+            )}
+          </div>
+
+          {unreadConvos.length === 0 ? (
+            <div className="notif-dropdown-empty">You're all caught up!</div>
+          ) : (
+            unreadConvos.map(c => {
+              const [bg, fg] = avatarColors(c.name);
+              return (
+                <div key={c.id} className="notif-row" onClick={() => goToConvo(c)}>
+                  <div className="notif-row-av" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)`, color: fg }}>
+                    {initialsOf(c.name)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="notif-row-name">{c.name}</div>
+                    <div className="notif-row-preview">{c.last_message || 'New message'}</div>
+                  </div>
+                  <span className="notif-count-badge">{c.unread}</span>
+                </div>
+              );
+            })
+          )}
+
+          <div className="notif-dropdown-footer">
+            <button onClick={goToAllMessages}>View all messages</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FeedNavLink({ to, label, icon, active = false, badge = 0, onNavigate }) {
   return (
     <Link to={to} className={`snav-item${active ? ' active' : ''}`} onClick={onNavigate}>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
@@ -623,6 +764,12 @@ function FeedNavLink({ to, label, icon, active = false, onNavigate }) {
         {icon}
       </svg>
       <span>{label}</span>
+      {badge > 0 && (
+        <span style={{
+          marginLeft: 'auto', background: '#EF4444', color: 'white',
+          fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+        }}>{badge > 99 ? '99+' : badge}</span>
+      )}
     </Link>
   );
 }

@@ -47,6 +47,7 @@ app.use('/api/events',       require('./routes/events'));
 app.use('/api/reports',      require('./routes/reports'));
 app.use('/api/certificates', require('./routes/certificates'));
 app.use('/api/xp',           require('./routes/xp'));
+app.use('/api/groups',       require('./routes/groups'));
 
 // Health-check endpoint (handy when wiring up the React dev proxy).
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

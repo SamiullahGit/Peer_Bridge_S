@@ -186,6 +186,24 @@
 }
 @keyframes slideUp { from { transform:translateY(16px); opacity:0 } to { transform:translateY(0); opacity:1 } }
 
+/* ── Dark mode overrides ─────────────────────────────────────────── */
+[data-theme="dark"] .xp-header h3         { color: var(--ink); }
+[data-theme="dark"] .xp-points            { color: var(--ink); }
+[data-theme="dark"] .xp-points span       { color: var(--ink-3); }
+[data-theme="dark"] .xp-bar-wrap          { background: var(--line); }
+[data-theme="dark"] .xp-bar-label         { color: var(--ink-3); }
+[data-theme="dark"] .xp-stat-card         { background: var(--bg-2); border-color: var(--line); }
+[data-theme="dark"] .xp-stat-card .value  { color: var(--ink); }
+[data-theme="dark"] .xp-stat-card .label  { color: var(--ink-3); }
+[data-theme="dark"] .xp-history-title     { color: var(--ink-2); }
+[data-theme="dark"] .xp-history-table th  { color: var(--ink-3); border-color: var(--line); }
+[data-theme="dark"] .xp-history-table td  { border-color: var(--line); color: var(--ink-2); }
+[data-theme="dark"] .xp-history-table td.pts { color: var(--mint-ink); }
+[data-theme="dark"] .cert-btn-disabled    { background: var(--bg-2); color: var(--ink-3); }
+[data-theme="dark"] .xp-locked-msg        { background: var(--gold-soft); border-color: rgba(251,191,36,.3); color: var(--gold-ink); }
+[data-theme="dark"] .xp-cooldown-msg      { background: var(--blue-soft); border-color: var(--blue-mid); color: var(--blue); }
+[data-theme="dark"] .cert-modal           { background: var(--card); }
+
 .cert-modal-header {
   background: linear-gradient(135deg, #0a1e3d, #1a3a6c);
   color: #fff;

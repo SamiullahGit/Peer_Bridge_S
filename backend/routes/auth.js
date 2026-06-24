@@ -9,6 +9,7 @@ const { toSafeUser }      = require('../data/shapers');
 const authMw              = require('../middleware/auth');
 const { awardDailyLogin } = require('../services/xpManager');
 const { sendMail }        = require('../services/mailer');
+const emailTpl            = require('../services/emailTemplates');
 const { makeStorage, fileUrl } = require('../config/storage');
 
 // ── Avatar upload (during profile setup) ───────────────────────────
@@ -160,6 +161,10 @@ router.post('/setup-profile', authMw, avatarUpload.single('profile_image'), asyn
 
     const { data: updated } = await supabase
       .from('users').update(update).eq('id', req.user.id).select('*').maybeSingle();
+
+    // Fire-and-forget welcome email.
+    sendMail({ to: updated.email, ...emailTpl.welcome({ name: updated.name, role: updated.role }) })
+      .catch(() => {});
 
     res.json({ token: makeToken(updated), user: toSafeUser(updated) });
   } catch (err) {

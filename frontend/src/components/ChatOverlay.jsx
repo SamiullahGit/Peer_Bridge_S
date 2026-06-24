@@ -55,13 +55,13 @@ export default function ChatOverlay({ peerId, peerName, onClose }) {
     >
       <div style={{
         position: 'absolute', right: 0, top: 0, bottom: 0,
-        width: 380, background: 'white',
-        borderLeft: '1.5px solid #E4EAF2',
-        boxShadow: '-8px 0 40px rgba(0,0,0,.1)',
+        width: 380, background: 'var(--card)',
+        borderLeft: '1.5px solid var(--line)',
+        boxShadow: '-8px 0 40px rgba(0,0,0,.2)',
         display: 'flex', flexDirection: 'column',
       }}>
         <div style={{
-          padding: '16px 18px', borderBottom: '1.5px solid #E4EAF2',
+          padding: '16px 18px', borderBottom: '1.5px solid var(--line)',
           display: 'flex', alignItems: 'center', gap: 12,
         }}>
           <div style={{
@@ -72,10 +72,10 @@ export default function ChatOverlay({ peerId, peerName, onClose }) {
           }}>{initialsOf(peerName)}</div>
           <div style={{ flex: 1 }}>
             <div
-              style={{ fontSize: 14, fontWeight: 700, color: '#0D1B2A', cursor: 'pointer' }}
+              style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', cursor: 'pointer' }}
               onClick={() => navigate(`/profile?id=${peerId}`)}
             >{peerName}</div>
-            <div style={{ fontSize: 11.5, color: '#8899B0' }}>usually replies in ~1h</div>
+            <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>usually replies in ~1h</div>
           </div>
           <button className="modal-close-btn" onClick={onClose}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
@@ -87,9 +87,9 @@ export default function ChatOverlay({ peerId, peerName, onClose }) {
 
         <div ref={scrollRef} style={{
           flex: 1, overflowY: 'auto', padding: 16,
-          display: 'flex', flexDirection: 'column', gap: 10, background: '#EEF0F5',
+          display: 'flex', flexDirection: 'column', gap: 10, background: 'var(--bg-2)',
         }}>
-          <div style={{ textAlign: 'center', fontSize: 11, color: '#8899B0' }}>
+          <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--ink-3)' }}>
             Conversation started · today
           </div>
           {msgs.map((m) => {
@@ -98,16 +98,16 @@ export default function ChatOverlay({ peerId, peerName, onClose }) {
               <div key={m.id} style={{
                 alignSelf: mine ? 'flex-end' : 'flex-start',
                 maxWidth: '78%', padding: '10px 14px', borderRadius: 14,
-                background: mine ? '#2563EB' : 'white',
-                color     : mine ? 'white' : '#0D1B2A',
+                background: mine ? 'var(--blue)' : 'var(--card)',
+                color     : mine ? 'white' : 'var(--ink)',
                 fontSize: 14, lineHeight: 1.45,
-                border  : mine ? 'none' : '1.5px solid #E4EAF2',
+                border  : mine ? 'none' : '1.5px solid var(--line)',
               }}>{m.text}</div>
             );
           })}
         </div>
 
-        <div style={{ padding: 12, borderTop: '1.5px solid #E4EAF2', display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div style={{ padding: 12, borderTop: '1.5px solid var(--line)', display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
             className="reply-input" placeholder="Type a message…" value={text}
             onChange={(e) => setText(e.target.value)}

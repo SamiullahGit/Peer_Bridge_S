@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate }            from 'react-router-dom';
 
-import { useAuth }    from '../context/AuthContext.jsx';
-import { pb }         from '../api/client.js';
+import { useAuth }            from '../context/AuthContext.jsx';
+import { useNotifications }  from '../context/NotificationContext.jsx';
+import { pb }                from '../api/client.js';
 import { roleLabel }  from '../utils/role.js';
 import { initialsOf } from '../utils/avatar.js';
 import { toast }      from './Toast.jsx';
@@ -48,7 +49,8 @@ function NavIcon({ children }) {
 }
 
 export default function Sidebar({ active, children, topnavMid = null, extraClass = '' }) {
-  const { user, logout } = useAuth();
+  const { user, logout }                   = useAuth();
+  const { unreadMsgs, markMsgsRead }       = useNotifications();
   const navigate         = useNavigate();
   const [collapsed, setCollapsed] = useState(() => sessionStorage.getItem('pb_sidebar') === 'collapsed');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -56,6 +58,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
   // Mentorship requests for the badge / modal.
   const [requests, setRequests]   = useState([]);
   const [showRequests, setShowRequests] = useState(false);
+
 
   const isMentor = user?.role === 'mentor';
   const name     = user?.name || 'You';
@@ -116,6 +119,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
     })();
     return () => { cancelled = true; };
   }, [isMentor]);
+
 
   async function respondRequest(reqId, status) {
     try {
@@ -182,9 +186,15 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
         {NAV_ITEMS.map(item => (
           <Link key={item.key} to={item.to}
                 className={`snav-item${active === item.key ? ' active' : ''}`}
-                onClick={closeMobileNav}>
+                onClick={() => { closeMobileNav(); if (item.key === 'messages') markMsgsRead(); }}>
             <NavIcon>{item.icon}</NavIcon>
             <span>{item.label}</span>
+            {item.key === 'messages' && unreadMsgs > 0 && (
+              <span style={{
+                marginLeft: 'auto', background: '#EF4444', color: 'white',
+                fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
+              }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>
+            )}
           </Link>
         ))}
 

@@ -83,17 +83,18 @@ router.post('/', auth, (req, res) => {
     }
 
     try {
-      const { tag, title, body } = req.body;
+      const { tag, title, body, is_anonymous } = req.body;
       if (!tag || !title) return res.status(400).json({ error: 'Tag and title are required' });
 
       const { data: post, error } = await supabase
         .from('posts')
         .insert({
-          author_id : req.user.id,
+          author_id   : req.user.id,
           tag,
           title,
-          body      : body || null,
-          image_path: fileUrl(req.file),
+          body        : body || null,
+          image_path  : fileUrl(req.file),
+          is_anonymous: is_anonymous === 'true',
         })
         .select(`*, ${POST_AUTHOR}`)
         .single();
@@ -137,6 +138,34 @@ router.get('/bookmarks', auth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch saved posts' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// PATCH /api/posts/:id   - author only  { tag?, title?, body? }
+// ─────────────────────────────────────────────────────────────────────
+router.patch('/:id', auth, async (req, res) => {
+  try {
+    const { data: post } = await supabase
+      .from('posts').select('id, author_id').eq('id', req.params.id).maybeSingle();
+    if (!post)              return res.status(404).json({ error: 'Post not found' });
+    if (post.author_id !== req.user.id) return res.status(403).json({ error: 'Forbidden' });
+
+    const { tag, title, body } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
+
+    const { data: updated, error } = await supabase
+      .from('posts')
+      .update({ tag, title: title.trim(), body: body || null })
+      .eq('id', req.params.id)
+      .select(`*, ${POST_AUTHOR}`)
+      .single();
+    if (error) throw error;
+
+    const [shaped] = await decoratePosts([updated], req.user.id);
+    res.json(shaped);
+  } catch {
+    res.status(500).json({ error: 'Failed to update post' });
   }
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import Sidebar       from '../components/Sidebar.jsx';
@@ -94,6 +94,29 @@ export default function Profile() {
     }
   }
 
+  async function deletePost(id) {
+    try {
+      await pb.del(`/posts/${id}`);
+      setProfile((prev) => ({ ...prev, posts: prev.posts.filter((p) => p.id !== id) }));
+      toast('Post deleted');
+    } catch (e) {
+      toast(e.message || 'Failed to delete post');
+    }
+  }
+
+  async function updatePost(id, fields) {
+    try {
+      const updated = await pb.patch(`/posts/${id}`, fields);
+      setProfile((prev) => ({
+        ...prev,
+        posts: prev.posts.map((p) => p.id === id ? { ...p, ...updated } : p),
+      }));
+    } catch (e) {
+      toast(e.message || 'Failed to update post');
+      throw e;
+    }
+  }
+
   async function deleteAccount() {
     if (!confirm('Are you sure you want to delete your account? This cannot be undone - all your posts and data will be permanently removed.')) return;
     try {
@@ -121,11 +144,11 @@ export default function Profile() {
       <div className="page-shell">
         {p.is_locked && (
           <div style={{
-            background: '#FEF2F2', border: '1.5px solid #FECACA', borderRadius: 12,
+            background: 'var(--blush)', border: '1.5px solid var(--blush-ink)', borderRadius: 12,
             padding: '16px 20px', marginBottom: 20,
             display: 'flex', alignItems: 'center', gap: 12,
           }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#991B1B' }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--blush-ink)' }}>
               This account has been suspended.
             </span>
           </div>
@@ -133,7 +156,7 @@ export default function Profile() {
 
         {/* Profile header card */}
         <div className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: '#f0f1f3' }}>
+          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)' }}>
             <button onClick={() => history.back()} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: 0, border: 'none', background: 'none',
@@ -178,7 +201,13 @@ export default function Profile() {
           {(p.posts || []).length === 0
             ? <div className="empty-state"><p>No posts yet</p></div>
             : (p.posts || []).map((post) => (
-                <PostRow key={post.id} post={post} onClick={() => navigate('/feed')} />
+                <PostRow
+                  key={post.id}
+                  post={post}
+                  isSelf={isSelf}
+                  onDelete={deletePost}
+                  onUpdate={updatePost}
+                />
               ))}
         </div>
       </div>
@@ -242,7 +271,7 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
           {p.department && <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{p.department}</span>}
           {p.graduation_year && <span style={{ color: 'var(--ink-3)', fontSize: 13 }}>'{String(p.graduation_year).slice(-2)}</span>}
           {p.is_online && (
-            <span style={{ fontSize: 11.5, color: '#2a5b46', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--mint-ink)', display: 'flex', alignItems: 'center', gap: 4 }}>
               <span className="dot" style={{ background: '#7fc9a4' }} /> Online
             </span>
           )}
@@ -291,10 +320,10 @@ function VerifiedBadge({ p }) {
   if (p.role !== 'mentor') return null;
   if (p.is_under_review)
     return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
-                          background: '#FEF3C7', color: '#92400E' }}>Under Review</span>;
+                          background: 'var(--gold-soft)', color: 'var(--gold-ink)' }}>Under Review</span>;
   if ((p.rating || 0) >= 4 && (p.rating_count || 0) >= 10)
     return <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
-                          background: '#D1FAE5', color: '#065F46' }}>Verified Mentor</span>;
+                          background: 'var(--mint)', color: 'var(--mint-ink)' }}>Verified Mentor</span>;
   return null;
 }
 
@@ -330,7 +359,7 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
         <button className="btn btn-primary" onClick={onSave} style={{ padding: '10px 18px' }}>Save</button>
         <button className="btn btn-ghost"   onClick={onCancel} style={{ padding: '10px 18px' }}>Cancel</button>
         <button className="btn btn-ghost"   onClick={onDelete}
-                style={{ padding: '10px 18px', color: '#DC2626', borderColor: '#FECACA', marginLeft: 'auto' }}>
+                style={{ padding: '10px 18px', color: 'var(--blush-ink)', borderColor: 'rgba(248,113,113,.35)', marginLeft: 'auto' }}>
           Delete account
         </button>
       </div>
@@ -338,7 +367,42 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
   );
 }
 
-function PostRow({ post, onClick }) {
+const POST_TAGS = ['Academic Help', 'Career', 'Resources', 'Events', 'General'];
+
+function PostRow({ post, isSelf, onDelete, onUpdate }) {
+  const [menuOpen,   setMenuOpen]   = useState(false);
+  const [editing,    setEditing]    = useState(false);
+  const [editTag,    setEditTag]    = useState(post.tag);
+  const [editTitle,  setEditTitle]  = useState(post.title);
+  const [editBody,   setEditBody]   = useState(post.body || '');
+  const [saving,     setSaving]     = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDown(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+
+  async function handleSave() {
+    if (!editTitle.trim()) return;
+    setSaving(true);
+    try {
+      await onUpdate(post.id, { tag: editTag, title: editTitle.trim(), body: editBody });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleDelete() {
+    setMenuOpen(false);
+    if (window.confirm('Delete this post? This cannot be undone.')) onDelete(post.id);
+  }
+
   if (post.is_hidden) {
     return (
       <div style={{ padding: '16px 0', borderTop: '1px solid var(--line)' }}>
@@ -350,25 +414,103 @@ function PostRow({ post, onClick }) {
   }
 
   return (
-    <div onClick={onClick} style={{ padding: '16px 0', borderTop: '1px solid var(--line)', cursor: 'pointer' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <span className={`tag tag-${tagTone(post.tag)}`}>{post.tag}</span>
-        <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{timeAgo(post.created_at)}</span>
+    <div style={{ padding: '16px 0', borderTop: '1px solid var(--line)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <span className={`tag tag-${tagTone(post.tag)}`}>{post.tag}</span>
+          <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{timeAgo(post.created_at)}</span>
+        </div>
+
+        {isSelf && !editing && (
+          <div style={{ position: 'relative', flexShrink: 0 }} ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 30, height: 30, borderRadius: 8,
+                border: '1.5px solid var(--line)', background: 'var(--bg-3)',
+                cursor: 'pointer', color: 'var(--ink-3)',
+              }}
+              title="Post options"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div style={{
+                position: 'absolute', right: 0, top: 34,
+                background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 10,
+                minWidth: 150, boxShadow: 'var(--shadow-md)', zIndex: 50, overflow: 'hidden',
+              }}>
+                <button
+                  onClick={() => { setMenuOpen(false); setEditing(true); setEditTag(post.tag); setEditTitle(post.title); setEditBody(post.body || ''); }}
+                  style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  Edit post
+                </button>
+                <button
+                  onClick={handleDelete}
+                  style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: '#DC2626', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  Delete post
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-      <div className="serif" style={{ fontSize: 18, fontWeight: 400, lineHeight: 1.3, marginBottom: 6 }}>
-        {post.title}
-      </div>
-      {post.body && (
-        <p style={{
-          margin: 0, fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.45,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }} dangerouslySetInnerHTML={{ __html: linkifyHTML(post.body) }} />
+
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+          <select
+            value={editTag} onChange={(e) => setEditTag(e.target.value)}
+            style={{ padding: '8px 12px', border: '1.5px solid var(--line)', borderRadius: 9, fontFamily: 'inherit', fontSize: 13, background: 'var(--card)', color: 'var(--ink)', cursor: 'pointer' }}
+          >
+            {POST_TAGS.map(t => <option key={t}>{t}</option>)}
+          </select>
+          <input
+            value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+            placeholder="Title"
+            style={{ padding: '9px 12px', border: '1.5px solid var(--line)', borderRadius: 9, fontFamily: 'inherit', fontSize: 14, fontWeight: 600, color: 'var(--ink)', background: 'var(--card)' }}
+          />
+          <textarea
+            value={editBody} onChange={(e) => setEditBody(e.target.value)}
+            placeholder="Body (optional)"
+            rows={4}
+            style={{ padding: '9px 12px', border: '1.5px solid var(--line)', borderRadius: 9, fontFamily: 'inherit', fontSize: 13.5, resize: 'vertical', lineHeight: 1.55, background: 'var(--card)', color: 'var(--ink)' }}
+          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={handleSave} disabled={saving || !editTitle.trim()}
+              style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: 'var(--blue)', color: 'white', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
+            >{saving ? 'Saving…' : 'Save'}</button>
+            <button
+              onClick={() => setEditing(false)}
+              style={{ padding: '8px 18px', borderRadius: 9, border: '1.5px solid var(--line)', background: 'var(--card)', color: 'var(--ink-2)', fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            >Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="serif" style={{ fontSize: 18, fontWeight: 400, lineHeight: 1.3, marginBottom: 6 }}>
+            {post.title}
+          </div>
+          {post.body && (
+            <p style={{
+              margin: 0, fontSize: 13.5, color: 'var(--ink-2)', lineHeight: 1.45,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }} dangerouslySetInnerHTML={{ __html: linkifyHTML(post.body) }} />
+          )}
+          <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
+            <span>♥ {post.likes_count}</span>
+            <span>{post.comments_count} replies</span>
+            <span>{post.bookmarks_count} saves</span>
+          </div>
+        </>
       )}
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 12, color: 'var(--ink-3)' }}>
-        <span>♥ {post.likes_count}</span>
-        <span>{post.comments_count} replies</span>
-        <span>{post.bookmarks_count} saves</span>
-      </div>
     </div>
   );
 }

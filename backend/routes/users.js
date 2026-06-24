@@ -4,6 +4,7 @@ const auth          = require('../middleware/auth');
 const { supabase }  = require('../config/supabase');
 const xpManager     = require('../services/xpManager');
 const { sendMail }  = require('../services/mailer');
+const emailTpl      = require('../services/emailTemplates');
 const { PUBLIC_FIELDS, toSafeUser } = require('../data/shapers');
 
 // Make a free-text term safe for a PostgREST ilike / .or() filter.
@@ -273,11 +274,26 @@ router.post('/promote-to-mentor', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/:id/request-mentorship', auth, async (req, res) => {
   try {
+    const message = req.body.message || null;
     await supabase.from('mentorship_requests').insert({
       requester_id: req.user.id,
       mentor_id   : req.params.id,
-      message     : req.body.message || null,
+      message,
     });
+
+    // Notify the mentor by email (fire-and-forget).
+    const { data: mentor } = await supabase
+      .from('users').select('name,email').eq('id', req.params.id).maybeSingle();
+    if (mentor?.email) {
+      const tpl = emailTpl.mentorshipRequest({
+        mentorName  : mentor.name,
+        studentName : req.user.name,
+        studentEmail: req.user.email,
+        message,
+      });
+      sendMail({ to: mentor.email, ...tpl }).catch(() => {});
+    }
+
     res.json({ message: 'Request sent' });
   } catch {
     res.status(500).json({ error: 'Failed to send request' });
