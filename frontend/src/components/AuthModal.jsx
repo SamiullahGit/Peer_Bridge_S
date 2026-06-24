@@ -91,6 +91,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
       if (!res.ok) throw new Error(data.error);
       setOtp(['', '', '', '', '', '']);
       setStep('otp');
+      toast('Verification code sent! Check your inbox — and your spam/junk folder if you don\'t see it.');
     } catch (err) {
       toast(err.message || 'Failed to send OTP');
     } finally {
@@ -239,11 +240,20 @@ function EmailStep({ email, setEmail, pw, setPw, pwMode, setPwMode, loading, han
 function OtpStep({ email, otp, otpRefs, loading, setOtpDigit, handleOtpKey, handleOtpPaste, handleVerify, back }) {
   return (
     <>
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 21, fontWeight: 800, color: '#0D1B2A', marginBottom: 5 }}>Check your email</div>
         <div style={{ fontSize: 13.5, color: '#8899B0' }}>
           6-digit code sent to <strong style={{ color: '#4B5C73' }}>{email}</strong>
         </div>
+      </div>
+      <div style={{
+        marginBottom: 18, padding: '10px 12px',
+        background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9,
+        fontSize: 12.5, color: '#92400E', lineHeight: 1.5,
+        display: 'flex', gap: 8, alignItems: 'flex-start',
+      }}>
+        <span style={{ flexShrink: 0, fontSize: 14 }}>⚠️</span>
+        <span>Don't see the email? Please check your <strong>spam / junk</strong> folder — the code sometimes lands there.</span>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {otp.map((digit, i) => (
