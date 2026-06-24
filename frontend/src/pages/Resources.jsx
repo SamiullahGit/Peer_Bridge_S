@@ -137,7 +137,7 @@ export default function Resources() {
             </div>
           ) : resources.map((r) => (
             <div key={r.id} style={{
-              background: '#fff', border: '1px solid var(--line)',
+              background: 'var(--card)', border: '1px solid var(--line)',
               borderRadius: 'var(--radius-lg)', padding: 20,
               boxShadow: 'var(--shadow-sm)',
               display: 'flex', flexDirection: 'column', gap: 12,
@@ -147,7 +147,7 @@ export default function Resources() {
                   width: 48, height: 48, borderRadius: 12,
                   background: 'var(--mint)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700, color: '#065F46', flexShrink: 0,
+                  fontSize: 11, fontWeight: 700, color: 'var(--mint-ink)', flexShrink: 0,
                 }}>{TYPE_ICONS[r.file_type] || 'FILE'}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 600, lineHeight: 1.3, marginBottom: 4 }}>

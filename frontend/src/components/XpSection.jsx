@@ -126,7 +126,7 @@ export default function XpSection() {
                 <tr key={i}>
                   <td className="pts">+{h.points}</td>
                   <td>{h.reason}</td>
-                  <td style={{ color: '#9ca3af' }}>{timeAgo(h.created_at)}</td>
+                  <td style={{ color: 'var(--ink-3)' }}>{timeAgo(h.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -142,16 +142,16 @@ export default function XpSection() {
           >Download Certificate</button>
         )}
         <button onClick={testAddXP} style={{
-          padding: '8px 14px', borderRadius: 8, border: '1.5px dashed #d1d5db',
-          background: '#f9fafb', color: '#6b7280', fontSize: 12, fontWeight: 600,
+          padding: '8px 14px', borderRadius: 8, border: '1.5px dashed var(--line-2)',
+          background: 'var(--bg-2)', color: 'var(--ink-3)', fontSize: 12, fontWeight: 600,
           fontFamily: 'inherit', cursor: 'pointer',
         }}>+100 XP (test)</button>
         {/* DEV ONLY - bypasses the 24h cooldown so we can preview design
             tweaks. Remove with the matching backend route before shipping. */}
         {isMentor && (
           <button onClick={testRegenerate} style={{
-            padding: '8px 14px', borderRadius: 8, border: '1.5px dashed #fcd34d',
-            background: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600,
+            padding: '8px 14px', borderRadius: 8, border: '1.5px dashed rgba(252,211,77,.5)',
+            background: 'var(--gold-soft)', color: 'var(--gold-ink)', fontSize: 12, fontWeight: 600,
             fontFamily: 'inherit', cursor: 'pointer',
           }}>Regenerate cert (test)</button>
         )}

@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem('pb_user',  JSON.stringify(newUser));
     setTokenState(newToken);
     setUserState(newUser);
+    window.dispatchEvent(new CustomEvent('pb-user-changed', { detail: { userId: newUser.id } }));
   }
 
   function clearAuth() {
