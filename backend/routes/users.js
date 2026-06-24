@@ -165,19 +165,23 @@ router.delete('/me', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.get('/:id', auth, async (req, res) => {
   try {
-    // Fetch the user and their last 10 posts in parallel (one round-trip
-    // instead of two) - the posts result is simply discarded on 404.
-    const [{ data: user }, { data: posts }] = await Promise.all([
+    // Fetch the user, their last 10 posts, and whether the viewer follows
+    // them - all in parallel. The non-user results are discarded on 404.
+    const [{ data: user }, { data: posts }, { data: followRow }] = await Promise.all([
       supabase.from('users').select(PUBLIC_FIELDS).eq('id', req.params.id).maybeSingle(),
       supabase.from('posts')
         .select('id, tag, title, body, likes_count, comments_count, bookmarks_count, is_hidden, created_at')
         .eq('author_id', req.params.id)
         .order('created_at', { ascending: false })
         .limit(10),
+      supabase.from('follows')
+        .select('id')
+        .eq('follower_id', req.user.id).eq('following_id', req.params.id)
+        .maybeSingle(),
     ]);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    res.json({ ...user, posts: posts || [] });
+    res.json({ ...user, is_following: !!followRow, posts: posts || [] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch user' });
@@ -293,6 +297,73 @@ router.post('/:id/request-mentorship', auth, async (req, res) => {
     res.json({ message: 'Request sent' });
   } catch {
     res.status(500).json({ error: 'Failed to send request' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// POST /api/users/:id/follow   (toggle follow/unfollow)
+// Keeps the denormalized followers_count / following_count in sync.
+// ─────────────────────────────────────────────────────────────────────
+router.post('/:id/follow', auth, async (req, res) => {
+  try {
+    const me     = req.user.id;
+    const target = req.params.id;
+    if (me === target) return res.status(400).json({ error: 'You cannot follow yourself' });
+
+    const { data: removed } = await supabase
+      .from('follows').delete()
+      .eq('follower_id', me).eq('following_id', target)
+      .select();
+
+    if (removed && removed.length) {
+      await Promise.all([
+        supabase.rpc('adjust_counter', { p_table: 'users', p_id: target, p_column: 'followers_count', p_delta: -1 }),
+        supabase.rpc('adjust_counter', { p_table: 'users', p_id: me,     p_column: 'following_count', p_delta: -1 }),
+      ]);
+      return res.json({ following: false });
+    }
+
+    const { error } = await supabase.from('follows').insert({ follower_id: me, following_id: target });
+    if (error) throw error;
+    await Promise.all([
+      supabase.rpc('adjust_counter', { p_table: 'users', p_id: target, p_column: 'followers_count', p_delta: 1 }),
+      supabase.rpc('adjust_counter', { p_table: 'users', p_id: me,     p_column: 'following_count', p_delta: 1 }),
+    ]);
+    res.json({ following: true });
+  } catch {
+    res.status(500).json({ error: 'Failed to update follow' });
+  }
+});
+
+// People who follow :id
+router.get('/:id/followers', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('created_at, u:follower_id(id,name,role,department,profile_image,followers_count)')
+      .eq('following_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json((data || []).map(r => r.u).filter(Boolean));
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch followers' });
+  }
+});
+
+// People :id follows
+router.get('/:id/following', auth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('created_at, u:following_id(id,name,role,department,profile_image,followers_count)')
+      .eq('follower_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    res.json((data || []).map(r => r.u).filter(Boolean));
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch following' });
   }
 });
 

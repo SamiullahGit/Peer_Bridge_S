@@ -7,6 +7,7 @@ import ToastHost  from '../components/Toast.jsx';
 import { toast }  from '../components/Toast.jsx';
 import { pb }     from '../api/client.js';
 import { MentorCardSkeleton } from '../components/Skeleton.jsx';
+import VerifiedTick, { FOLLOWERS_FOR_VERIFIED } from '../components/VerifiedTick.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
@@ -135,6 +136,7 @@ function MentorCard({ m, isRequested, onProfile, onMessage, onConnect }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <strong style={{ fontSize: 15 }}>{m.name}</strong>
+            {(m.followers_count || 0) >= FOLLOWERS_FOR_VERIFIED && <VerifiedTick size={15} />}
             {isVerified && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
