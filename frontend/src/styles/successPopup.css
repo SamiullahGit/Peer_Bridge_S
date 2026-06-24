@@ -1,0 +1,51 @@
+/* Floating success popup with an animated tick. Auto-dismissed by the
+   caller (shown ~2.5s). */
+
+.pb-success-pop {
+  position: fixed;
+  top: 26px;
+  left: 50%;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: #ffffff;
+  color: #0d1b2a;
+  padding: 13px 20px 13px 14px;
+  border-radius: 14px;
+  border: 1px solid #d1fae5;
+  box-shadow: 0 16px 40px rgba(13, 27, 42, 0.18);
+  font-size: 13.5px;
+  font-weight: 600;
+  max-width: 92vw;
+  animation: pb-pop-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both,
+             pb-pop-out 0.3s ease 2.2s both;
+}
+
+.pb-success-pop .pb-check {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pb-check-pop 0.4s 0.08s cubic-bezier(0.2, 1.5, 0.45, 1) both;
+}
+
+@keyframes pb-pop-in {
+  from { opacity: 0; transform: translate(-50%, -14px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes pb-pop-out {
+  to { opacity: 0; transform: translate(-50%, -10px); }
+}
+@keyframes pb-check-pop {
+  0%   { transform: scale(0); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-success-pop, .pb-success-pop .pb-check { animation: none; transform: translate(-50%, 0); }
+}

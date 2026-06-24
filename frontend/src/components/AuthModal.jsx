@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate }                  from 'react-router-dom';
 
-import { useAuth } from '../context/AuthContext.jsx';
-import { toast }   from './Toast.jsx';
+import { useAuth }   from '../context/AuthContext.jsx';
+import { toast }     from './Toast.jsx';
+import SuccessPopup  from './SuccessPopup.jsx';
 
 const NUST_DOMAINS = new Set([
   'nust.edu.pk', 'student.nust.edu.pk',
@@ -33,6 +34,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
   const [pw, setPw]          = useState('');
   const [otp, setOtp]        = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
+  const [sentPopup, setSentPopup] = useState(false);
 
   const otpRefs = useRef([]);
   const verifyingRef = useRef(false);
@@ -91,7 +93,8 @@ export default function AuthModal({ initialEmail = '', onClose }) {
       if (!res.ok) throw new Error(data.error);
       setOtp(['', '', '', '', '', '']);
       setStep('otp');
-      toast('Verification code sent! Check your inbox — and your spam/junk folder if you don\'t see it.');
+      setSentPopup(true);
+      setTimeout(() => setSentPopup(false), 2500);
     } catch (err) {
       toast(err.message || 'Failed to send OTP');
     } finally {
@@ -152,8 +155,10 @@ export default function AuthModal({ initialEmail = '', onClose }) {
   }
 
   return (
-    <div className="lp-auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="lp-auth-modal">
+    <>
+      {sentPopup && <SuccessPopup message="Code sent! Check your inbox." />}
+      <div className="lp-auth-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+        <div className="lp-auth-modal">
         <button className="lp-auth-close" onClick={onClose}>X</button>
         <div className="lp-auth-body">
           {step === 'email'   && <EmailStep   {...{ email, setEmail, pw, setPw, pwMode, setPwMode, loading, handleEmailSubmit, handlePwLogin }} />}
@@ -163,6 +168,7 @@ export default function AuthModal({ initialEmail = '', onClose }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -253,7 +259,7 @@ function OtpStep({ email, otp, otpRefs, loading, setOtpDigit, handleOtpKey, hand
         display: 'flex', gap: 8, alignItems: 'flex-start',
       }}>
         <span style={{ flexShrink: 0, fontSize: 14 }}>⚠️</span>
-        <span>Don't see the email? Please check your <strong>spam / junk</strong> folder — the code sometimes lands there.</span>
+        <span>Can't find the email? It may be in your <strong>spam or junk</strong> folder.</span>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
         {otp.map((digit, i) => (
