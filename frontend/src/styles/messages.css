@@ -4,6 +4,9 @@
 .with-sidebar.messages-page { overflow: hidden; }
 .messages-page .snav-content { overflow: hidden !important; }
 
+.with-sidebar.groups-page { overflow: hidden; }
+.groups-page .snav-content { overflow: hidden !important; display: flex; flex-direction: column; }
+
 .msg-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; background: var(--bg); }
 
 .msg-layout {

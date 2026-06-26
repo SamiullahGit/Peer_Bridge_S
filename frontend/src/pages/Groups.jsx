@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate }           from 'react-router-dom';
+import { useNavigate }                 from 'react-router-dom';
 
 import { pb }                from '../api/client.js';
 import { useAuth }           from '../context/AuthContext.jsx';
-import { useNotifications }  from '../context/NotificationContext.jsx';
 import { useTheme }          from '../context/ThemeContext.jsx';
 import { initialsOf, avatarColors } from '../utils/avatar.js';
-import { roleLabel }         from '../utils/role.js';
-import { timeAgo }           from '../utils/time.js';
+import { timeAgo }                 from '../utils/time.js';
 import { toast }             from '../components/Toast.jsx';
 import ToastHost             from '../components/Toast.jsx';
-import BridgeLogo            from '../components/BridgeLogo.jsx';
+import Sidebar               from '../components/Sidebar.jsx';
 
-import '../styles/feed.css';
+import '../styles/messages.css';
 
 /* ── Topic colours ─────────────────────────────────────────────────── */
 const TOPIC_COLORS = {
@@ -64,11 +62,10 @@ function CrownIcon({ size = 13 }) {
    Main page
    ═══════════════════════════════════════════════════════════════════════ */
 export default function Groups() {
-  const { user: me, logout }         = useAuth();
-  const { unreadMsgs }               = useNotifications();
-  const { theme }                    = useTheme();
-  const navigate                     = useNavigate();
-  const dark                         = theme === 'dark';
+  const { user: me }  = useAuth();
+  const { theme }     = useTheme();
+  const navigate      = useNavigate();
+  const dark          = theme === 'dark';
 
   /* Palette for groups-specific content (sidebar+topnav handled by feed.css) */
   const C = dark ? {
@@ -110,7 +107,6 @@ export default function Groups() {
   const messagesEndRef = useRef(null);
   const pollRef        = useRef(null);
   const inputRef       = useRef(null);
-  const initials       = initialsOf(me?.name || 'You');
 
   /* ── Data ─────────────────────────────────────────────────────────── */
   useEffect(() => { loadGroups(); }, []);
@@ -235,52 +231,16 @@ export default function Groups() {
   const displayedGroups = groups.filter(g => g.is_member);
   const amAdmin         = activeGroup?.my_role === 'admin';
 
-  /* ════════════════════════════════════════════════════════════════════
-     RENDER — uses same feed-app grid as Feed page → sidebar appears
-     ════════════════════════════════════════════════════════════════════ */
   return (
-    <div className="feed">
+    <Sidebar active="groups" extraClass="groups-page">
       <ToastHost />
 
-      {/* panel-hidden removes right rail → 220px sidebar + 1fr content */}
-      <div className="feed-app panel-hidden">
-
-        {/* ── Topnav — NO theme toggle (Feed page only) ────────── */}
-        <header className="feed-topnav">
-          <Link to="/feed" className="feed-topnav-logo">
-            <BridgeLogo width={38} height={26} variant="nav" />
-            <span>Peer Bridge</span>
-          </Link>
-          <div style={{ flex: 1, padding: '0 20px' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,.7)' }}>
-              Study Groups
-            </span>
-          </div>
-          <div className="topnav-right">
-            <div className="user-chip" onClick={() => navigate('/profile')}>
-              {me?.profile_image
-                ? <img src={me.profile_image} alt={me.name}
-                       style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
-                : <div style={{
-                    width: 30, height: 30, borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, color: 'white',
-                  }}>{initials}</div>}
-              <div className="user-chip-name">{me?.name || 'You'}</div>
-            </div>
-          </div>
-        </header>
-
-        {/* ── Sidebar ─────────────────────────────────────────────── */}
-        <GroupsNav me={me} initials={initials} unreadMsgs={unreadMsgs} onLogout={logout} />
-
-        {/* ── Groups content (left list + chat + optional info panel) ── */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: infoOpen && activeGroup ? '280px 1fr 296px' : '280px 1fr',
-          overflow: 'hidden',
-        }}>
+      {/* ── Groups content (left list + chat + optional info panel) ── */}
+      <div style={{
+        flex: 1, minHeight: 0, overflow: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: infoOpen && activeGroup ? '280px 1fr 296px' : '280px 1fr',
+      }}>
 
           {/* ══ LEFT: Group list panel ══════════════════════════════ */}
           <div style={{
@@ -793,7 +753,6 @@ export default function Groups() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Create group modal */}
       {createOpen && (
@@ -808,97 +767,7 @@ export default function Groups() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-/* ── Sidebar — identical nav to Feed, Study Groups active ─────────── */
-function GroupsNav({ me, initials, unreadMsgs, onLogout }) {
-  return (
-    <nav className="snav">
-      <div className="snav-section">Main</div>
-
-      <Link to="/feed"      className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 12 12 4l9 8"/><path d="M5 10v10h14V10"/>
-        </svg>
-        <span>Home</span>
-      </Link>
-      <Link to="/mentors"   className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Mentors</span>
-      </Link>
-      <Link to="/resources" className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/>
-        </svg>
-        <span>Resources</span>
-      </Link>
-      <Link to="/events"    className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>
-        </svg>
-        <span>Events</span>
-      </Link>
-      <Link to="/groups" className="snav-item active">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Study Groups</span>
-      </Link>
-      <Link to="/messages"  className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z"/>
-        </svg>
-        <span>Messages</span>
-        {unreadMsgs > 0 && (
-          <span style={{
-            marginLeft: 'auto', background: '#EF4444', color: 'white',
-            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
-          }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>
-        )}
-      </Link>
-      <Link to="/saved"     className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 3h12v18l-6-4-6 4V3Z"/>
-        </svg>
-        <span>Saved</span>
-      </Link>
-
-      <div className="snav-section" style={{ marginTop: 8 }}>Account</div>
-      <Link to="/profile" className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/>
-          <path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66"/>
-        </svg>
-        <span>My Profile</span>
-      </Link>
-
-      <div className="snav-footer">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 800, color: 'white', flexShrink: 0,
-          }}>{initials}</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{me?.name || 'You'}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.55)' }}>{roleLabel(me?.role || 'student')}</div>
-          </div>
-        </div>
-        <button onClick={onLogout} style={{
-          width: '100%', padding: 8,
-          border: '1.5px solid rgba(255,255,255,.2)', borderRadius: 8,
-          background: 'rgba(255,255,255,.08)', fontFamily: 'inherit',
-          fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,.75)', cursor: 'pointer',
-        }}>Sign out</button>
-      </div>
-    </nav>
+    </Sidebar>
   );
 }
 
