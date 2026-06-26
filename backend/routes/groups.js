@@ -220,13 +220,14 @@ router.get('/:id/messages', auth, async (req, res) => {
     if (!member) return res.status(403).json({ error: 'Join the group first' });
 
     const { data: msgs, error } = await supabase.from('group_messages')
-      .select('id, text, created_at, sender:sender_id(id,name,role,profile_image)')
+      .select('id, text, created_at, is_pinned, sender:sender_id(id,name,role,profile_image)')
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true }).limit(100);
     if (error) throw error;
 
     res.json((msgs || []).map(m => ({
       id          : m.id, text: m.text, created_at: m.created_at,
+      is_pinned   : m.is_pinned || false,
       sender_id   : m.sender?.id,  sender_name : m.sender?.name,
       sender_role : m.sender?.role, sender_image: m.sender?.profile_image,
     })));
@@ -253,12 +254,35 @@ router.post('/:id/messages', auth, async (req, res) => {
 
     res.status(201).json({
       id: msg.id, text: msg.text, created_at: msg.created_at,
+      is_pinned: false,
       sender_id: req.user.id, sender_name: req.user.name,
       sender_role: req.user.role, sender_image: null,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── PATCH /api/groups/:id/messages/:msgId/pin  (admin: pin/unpin) ──────
+router.patch('/:id/messages/:msgId/pin', auth, async (req, res) => {
+  try {
+    const { data: me } = await supabase.from('group_members').select('role')
+      .eq('group_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+    if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+
+    const pin = req.body.pinned !== false;
+    // Only one pinned announcement at a time — clear others when pinning.
+    if (pin) {
+      await supabase.from('group_messages').update({ is_pinned: false })
+        .eq('group_id', req.params.id).eq('is_pinned', true);
+    }
+    await supabase.from('group_messages').update({ is_pinned: pin })
+      .eq('id', req.params.msgId).eq('group_id', req.params.id);
+    res.json({ ok: true, is_pinned: pin });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to pin message' });
   }
 });
 
