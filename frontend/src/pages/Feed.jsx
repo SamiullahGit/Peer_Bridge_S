@@ -10,6 +10,7 @@ import { toast }         from '../components/Toast.jsx';
 import BridgeLogo        from '../components/BridgeLogo.jsx';
 import PostCard          from '../components/PostCard.jsx';
 import { PostCardSkeleton, PanelRowSkeleton } from '../components/Skeleton.jsx';
+import ThemeToggle       from '../components/ThemeToggle.jsx';
 import ComposerModal     from '../components/ComposerModal.jsx';
 import ChatOverlay       from '../components/ChatOverlay.jsx';
 import ReportModal       from '../components/ReportModal.jsx';
@@ -581,6 +582,8 @@ function FeedSidebar({ isMentor, requestsCount, onToggle, onLogout, onOpenReques
         <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="10" r="3" />
           <path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66" /></>
       } />
+
+      <ThemeToggle />
 
       <div className="snav-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>

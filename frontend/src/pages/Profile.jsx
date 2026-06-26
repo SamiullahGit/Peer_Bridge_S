@@ -133,7 +133,7 @@ export default function Profile() {
 
         {/* Profile header card */}
         <div className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: '#f0f1f3' }}>
+          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-3)' }}>
             <button onClick={() => history.back()} style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: 0, border: 'none', background: 'none',

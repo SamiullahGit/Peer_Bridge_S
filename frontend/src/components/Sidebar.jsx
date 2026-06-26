@@ -9,6 +9,7 @@ import { toast }      from './Toast.jsx';
 
 import BridgeLogo     from './BridgeLogo.jsx';
 import RequestsModal  from './RequestsModal.jsx';
+import ThemeToggle    from './ThemeToggle.jsx';
 
 /*
   Combined topnav + collapsible side-nav, used as the layout shell on
@@ -219,6 +220,8 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
           </NavIcon>
           <span>My Profile</span>
         </Link>
+
+        <ThemeToggle />
 
         <div className="snav-footer">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>

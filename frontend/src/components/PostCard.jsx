@@ -40,7 +40,7 @@ export default function PostCard({
   if (post.is_hidden) {
     return (
       <div className="post-card" data-id={post.id} style={{ textAlign: 'center', padding: '28px 20px' }}>
-        <p style={{ fontSize: 14, color: '#8899B0', fontStyle: 'italic' }}>
+        <p style={{ fontSize: 14, color: 'var(--ink-3)', fontStyle: 'italic' }}>
           This post has been flagged by the community.
         </p>
       </div>
@@ -54,15 +54,15 @@ export default function PostCard({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
             <span
-              style={{ fontSize: 14, fontWeight: 700, cursor: 'pointer', color: '#0D1B2A' }}
+              style={{ fontSize: 14, fontWeight: 700, cursor: 'pointer', color: 'var(--ink)' }}
               onClick={() => onProfileClick(post.author_id)}
             >{post.author_name}</span>
             {isMentor && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px',
                              borderRadius: 100, background: '#EFF6FF', color: '#2563EB' }}>MENTOR</span>
             )}
-            <span style={{ fontSize: 12, color: '#8899B0' }}>{metaStr(post)}</span>
-            <span style={{ fontSize: 12, color: '#8899B0' }}>· {timeAgo(post.created_at)}</span>
+            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{metaStr(post)}</span>
+            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>· {timeAgo(post.created_at)}</span>
           </div>
           <div style={{ marginTop: 5 }}><TagPill tag={post.tag} /></div>
         </div>
@@ -95,7 +95,7 @@ export default function PostCard({
               {menuOpen && (
                 <div style={{
                   position: 'absolute', right: 0, top: 36,
-                  background: 'white', border: '1.5px solid #E4EAF2', borderRadius: 10,
+                  background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 10,
                   minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,.1)',
                   zIndex: 50, overflow: 'hidden',
                 }}>
@@ -115,23 +115,23 @@ export default function PostCard({
         </div>
       </div>
 
-      <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0D1B2A',
+      <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink)',
                    margin: '14px 0 6px', lineHeight: 1.35 }}>{post.title}</h3>
       {post.body && (
-        <p style={{ fontSize: 14, lineHeight: 1.6, color: '#4B5C73', margin: 0 }}
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}
            dangerouslySetInnerHTML={{ __html: linkifyHTML(post.body) }} />
       )}
       {post.image_path && (
         <div style={{ marginTop: 14 }}>
           <img src={post.image_path} alt="Post"
                style={{ display: 'block', width: '100%', maxHeight: 360, objectFit: 'cover',
-                        borderRadius: 14, border: '1.5px solid #E4EAF2', background: '#EEF0F5' }} />
+                        borderRadius: 14, border: '1.5px solid var(--line)', background: 'var(--bg-3)' }} />
         </div>
       )}
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        marginTop: 14, paddingTop: 14, borderTop: '1.5px solid #E4EAF2', flexWrap: 'wrap',
+        marginTop: 14, paddingTop: 14, borderTop: '1.5px solid var(--line)', flexWrap: 'wrap',
       }}>
         <button className={`act-btn${post.liked ? ' liked' : ''}`} onClick={() => onLike(post.id)}>
           <svg width="13" height="13" viewBox="0 0 24 24"
@@ -174,20 +174,20 @@ export default function PostCard({
       </div>
 
       {repliesOpen && (
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1.5px dashed #E4EAF2' }}>
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1.5px dashed var(--line)' }}>
           {replies.map((r) => (
             <div key={r.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
               <Avatar name={r.author_name} size={30} />
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, flexWrap: 'wrap' }}>
-                  <strong style={{ color: '#0D1B2A' }}>{r.author_name}</strong>
-                  <span style={{ color: '#8899B0' }}>· {roleLabel(r.author_role)} · {timeAgo(r.created_at)}</span>
+                  <strong style={{ color: 'var(--ink)' }}>{r.author_name}</strong>
+                  <span style={{ color: 'var(--ink-3)' }}>· {roleLabel(r.author_role)} · {timeAgo(r.created_at)}</span>
                   {r.author_role === 'mentor' && (
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px',
                                    borderRadius: 100, background: '#EFF6FF', color: '#2563EB' }}>MENTOR</span>
                   )}
                 </div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: '#0D1B2A' }}>{r.text}</div>
+                <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
               </div>
             </div>
           ))}

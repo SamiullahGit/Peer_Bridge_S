@@ -220,7 +220,7 @@ function EventCard({ e, viewMode, onClick }) {
     <div
       onClick={onClick}
       style={{
-        background: '#fff', border: '1px solid var(--line)',
+        background: 'var(--card)', border: '1px solid var(--line)',
         borderRadius: 'var(--radius-lg)', overflow: 'hidden',
         boxShadow: 'var(--shadow-sm)', cursor: 'pointer', position: 'relative',
         opacity: isPast ? 0.82 : 1,
@@ -242,12 +242,12 @@ function EventCard({ e, viewMode, onClick }) {
           <CardOverlay e={e} day={day} month={month} />
         </div>
       ) : (
-        <div style={{ background: bg, padding: '20px 22px',
+        <div style={{ background: bg, padding: '20px 22px', color: '#13233f',
                       display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ textAlign: 'center', minWidth: 52 }}>
             <div className="serif" style={{ fontSize: 36, lineHeight: 1, fontWeight: 400 }}>{day}</div>
             <div style={{ fontSize: 10, letterSpacing: '0.1em', fontWeight: 700,
-                          color: 'var(--ink-2)', marginTop: 2 }}>{month}</div>
+                          color: '#475569', marginTop: 2 }}>{month}</div>
           </div>
           <div style={{ flex: 1 }}>
             <div className="serif" style={{ fontSize: 20, lineHeight: 1.2, marginBottom: 4 }}>{e.title}</div>
