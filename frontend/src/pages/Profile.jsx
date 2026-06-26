@@ -17,6 +17,31 @@ import FollowListModal from '../components/FollowListModal.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
+// Animated count-up: eases from 0 to `target` over `dur` ms.
+function useCountUp(target = 0, dur = 900) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let raf, start;
+    const from = 0, to = Number(target) || 0;
+    if (to === 0) { setN(0); return; }
+    function tick(t) {
+      if (!start) start = t;
+      const p = Math.min((t - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+      setN(Math.round(from + (to - from) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, dur]);
+  return n;
+}
+
+function CountUp({ value, dur }) {
+  const n = useCountUp(value, dur);
+  return <>{n}</>;
+}
+
 export default function Profile() {
   const { user: me, setAuth, token, logout } = useAuth();
   const navigate     = useNavigate();
@@ -165,9 +190,13 @@ export default function Profile() {
               fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--blue)', cursor: 'pointer',
             }}>&larr; Back</button>
           </div>
-          <div style={{ padding: 32, display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
-            <Avatar name={p.name} size={80} imgUrl={p.profile_image || ''} />
-            <div style={{ flex: 1, minWidth: 200 }}>
+          {/* Animated gradient cover */}
+          <div className="profile-cover" />
+          <div style={{ padding: '0 32px 32px', display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
+            <div className="profile-avatar-wrap">
+              <Avatar name={p.name} size={88} imgUrl={p.profile_image || ''} />
+            </div>
+            <div style={{ flex: 1, minWidth: 200, paddingTop: 18 }}>
               {editMode
                 ? <EditForm
                     edit={edit} setEdit={setEdit}
@@ -202,10 +231,11 @@ export default function Profile() {
           </div>
           {(p.posts || []).length === 0
             ? <div className="empty-state"><p>No posts yet</p></div>
-            : (p.posts || []).map((post) => (
+            : (p.posts || []).map((post, i) => (
                 <PostRow
                   key={post.id}
                   post={post}
+                  index={i}
                   isSelf={isSelf}
                   onDelete={deletePost}
                   onUpdate={updatePost}
@@ -246,6 +276,21 @@ export default function Profile() {
 
 /* ── Sub-components ──────────────────────────────────────────────── */
 
+function StatCard({ label, value, text, delay = 0, accent = 'var(--blue)' }) {
+  return (
+    <div className="profile-stat-card stat-pop" style={{
+      minWidth: 84, padding: '10px 14px', borderRadius: 12,
+      border: '1.5px solid var(--line)', background: 'var(--card)',
+      animationDelay: `${delay}ms`,
+    }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: accent, lineHeight: 1.1 }}>
+        {text !== undefined ? text : <CountUp value={value} />}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
 function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing }) {
   const statBtn = {
     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
@@ -260,13 +305,21 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
           <VerifiedBadge p={p} />
         </div>
 
-        <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 20, marginBottom: 12 }}>
           <button type="button" onClick={onShowFollowers} style={statBtn}>
-            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.followers_count || 0}</strong> followers
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}><CountUp value={p.followers_count || 0} /></strong> followers
           </button>
           <button type="button" onClick={onShowFollowing} style={statBtn}>
-            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.following_count || 0}</strong> following
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}><CountUp value={p.following_count || 0} /></strong> following
           </button>
+        </div>
+
+        {/* Animated stat cards */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <StatCard label="Total XP"  value={p.total_xp || 0} delay={0}   accent="var(--gold-ink)" />
+          <StatCard label="Level"     text={p.xp_level || 'Bronze'} delay={80} accent="var(--blue)" />
+          {isMentor && <StatCard label="Sessions" value={p.sessions_count || 0} delay={160} accent="var(--mint-ink)" />}
+          {isMentor && <StatCard label="Rating"   text={Number(p.rating || 0).toFixed(1)} delay={240} accent="var(--gold-ink)" />}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <span className="tag tag-lav">{roleLabel(p.role)}</span>
@@ -438,7 +491,7 @@ function SkillsEditor({ skills, onChange }) {
 
 const POST_TAGS = ['Academic Help', 'Career', 'Resources', 'Events', 'General'];
 
-function PostRow({ post, isSelf, onDelete, onUpdate }) {
+function PostRow({ post, index = 0, isSelf, onDelete, onUpdate }) {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [editing,    setEditing]    = useState(false);
   const [editTag,    setEditTag]    = useState(post.tag);
@@ -483,7 +536,8 @@ function PostRow({ post, isSelf, onDelete, onUpdate }) {
   }
 
   return (
-    <div style={{ padding: '16px 0', borderTop: '1px solid var(--line)' }}>
+    <div className="fade-up" style={{ padding: '16px 0', borderTop: '1px solid var(--line)',
+                  animationDelay: `${Math.min(index * 60, 360)}ms` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <span className={`tag tag-${tagTone(post.tag)}`}>{post.tag}</span>

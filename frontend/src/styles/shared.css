@@ -82,6 +82,18 @@ body{
   background: linear-gradient(180deg, #111827 0%, var(--bg) 100%);
 }
 .serif{font-family:var(--serif);font-weight:800;letter-spacing:-0.03em}
+
+/* ── Profile animations ───────────────────────────────────────────── */
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.profile-cover{height:104px;background:linear-gradient(120deg,#2563eb,#7c3aed,#0ea5e9,#2563eb);background-size:300% 300%;animation:gradientShift 9s ease infinite;position:relative}
+.profile-cover::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 20% 30%,rgba(255,255,255,.18),transparent 40%),radial-gradient(circle at 80% 70%,rgba(255,255,255,.12),transparent 40%)}
+.profile-avatar-wrap{margin-top:-52px;border:4px solid var(--card);border-radius:50%;background:var(--card);box-shadow:var(--shadow-md);animation:popIn .45s cubic-bezier(.34,1.4,.64,1) both}
+@keyframes popIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes statRise{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+.stat-pop{animation:statRise .5s ease both}
+.profile-stat-card{transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.profile-stat-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:var(--blue-mid)}
+@keyframes ringFill{from{stroke-dashoffset:var(--ring-circ)}}
 .mono{font-family:var(--mono)}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,textarea,select{font-family:inherit;color:inherit}
