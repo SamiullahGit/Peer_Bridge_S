@@ -64,6 +64,20 @@ export default function PostCard({
   const [replyingTo, setReplyingTo]   = useState(null);
   const [nestedDraft, setNestedDraft] = useState('');
 
+  // AI thread summary
+  const [summary, setSummary]   = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+  async function summarize() {
+    setMenuOpen(false);
+    setSummarizing(true);
+    try {
+      const r = await pb.post('/ai/summarize', { post_id: post.id });
+      setSummary(r.summary);
+    } catch (e) {
+      setSummary(`⚠️ ${e.message || 'Could not summarize.'}`);
+    } finally { setSummarizing(false); }
+  }
+
   async function react(key) {
     setReactOpen(false);
     const prev = myReaction;
@@ -206,6 +220,17 @@ export default function PostCard({
                   </svg>
                   {post.bookmarked ? 'Unsave post' : 'Save post'}
                 </button>
+                {(post.comments_count || 0) > 0 && (
+                  <button
+                    onClick={summarize}
+                    style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: '#7C3AED', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--line)' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
+                    </svg>
+                    Summarize with Baba
+                  </button>
+                )}
                 {isOwn ? (
                   <>
                     <button
@@ -284,6 +309,23 @@ export default function PostCard({
       )}
 
       {post.has_poll && <PollBlock postId={post.id} />}
+
+      {(summarizing || summary) && (
+        <div style={{ marginTop: 14, padding: 14, borderRadius: 12,
+                      border: '1.5px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: summary ? 8 : 0 }}>
+            <span style={{ fontSize: 15 }}>🧕</span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7C3AED' }}>Baba's summary</span>
+            {summary && (
+              <button onClick={() => setSummary(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent',
+                       color: 'var(--ink-3)', cursor: 'pointer', fontSize: 15 }}>×</button>
+            )}
+          </div>
+          {summarizing
+            ? <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>Reading the thread…</div>
+            : <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{summary}</div>}
+        </div>
+      )}
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,

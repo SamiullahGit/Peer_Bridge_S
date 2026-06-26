@@ -31,6 +31,8 @@ export default function Messages() {
   const [search, setSearch]     = useState('');
   const [attach, setAttach]     = useState(null);   // { file, kind }
   const [replyTo, setReplyTo]   = useState(null);   // message being replied to
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggesting, setSuggesting]   = useState(false);
   const pollRef     = useRef(null);
   const scrollRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -112,6 +114,22 @@ export default function Messages() {
   function openConvo(id, name) {
     setActiveId(id);
     setActiveName(name);
+    setSuggestions([]);
+  }
+
+  async function getSuggestions() {
+    if (!msgs.length) { toast('No conversation yet'); return; }
+    setSuggesting(true);
+    try {
+      const convo = msgs.slice(-8).map((m) => ({
+        role: m.sender_id === me?.id ? 'me' : 'them',
+        content: m.text || '[attachment]',
+      }));
+      const r = await pb.post('/ai/suggest-replies', { messages: convo });
+      setSuggestions(r.suggestions || []);
+      if (!r.suggestions?.length) toast('No suggestions right now');
+    } catch (e) { toast(e.message || 'Failed'); }
+    finally { setSuggesting(false); }
   }
 
   const filteredConvos = !search.trim()
@@ -197,6 +215,17 @@ export default function Messages() {
                   })}
                 </div>
 
+                {suggestions.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, padding: '0 14px 8px' }}>
+                    {suggestions.map((s, i) => (
+                      <button key={i} onClick={() => { setDraft(s); setSuggestions([]); }} style={{
+                        padding: '7px 12px', borderRadius: 999, cursor: 'pointer',
+                        border: '1.5px solid #7C3AED', background: 'rgba(124,58,237,.08)',
+                        color: '#7C3AED', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                      }}>{s}</button>
+                    ))}
+                  </div>
+                )}
                 {replyTo && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -248,6 +277,13 @@ export default function Messages() {
                     </svg>
                   </button>
                   <VoiceRecorder onRecorded={(file) => setAttach({ file, kind: 'audio' })} />
+                  <button className="chat-attach-btn" onClick={getSuggestions} disabled={suggesting}
+                          title="Suggest replies with Baba"
+                          style={{ color: '#7C3AED', borderColor: 'rgba(124,58,237,.3)' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
+                    </svg>
+                  </button>
                   <input
                     className="chat-input-field" placeholder="Type a message…"
                     value={draft} onChange={(e) => setDraft(e.target.value)}
