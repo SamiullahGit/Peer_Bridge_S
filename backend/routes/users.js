@@ -3,9 +3,21 @@ const router = require('express').Router();
 const auth          = require('../middleware/auth');
 const { supabase }  = require('../config/supabase');
 const xpManager     = require('../services/xpManager');
+const multer        = require('multer');
 const { sendMail }  = require('../services/mailer');
 const emailTpl      = require('../services/emailTemplates');
+const { notify }    = require('../services/notify');
+const { makeStorage, fileUrl } = require('../config/storage');
 const { PUBLIC_FIELDS, toSafeUser } = require('../data/shapers');
+
+const avatarUpload = multer({
+  storage: makeStorage('avatars', 'avatar'),
+  limits : { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) return cb(new Error('Only image uploads are allowed'));
+    cb(null, true);
+  },
+});
 
 // Make a free-text term safe for a PostgREST ilike / .or() filter.
 function likeTerm(s) {
@@ -22,7 +34,7 @@ async function sendEmail(to, subject, text) {
 
 router.get('/mentors', auth, async (req, res) => {
   try {
-    const { search, dept } = req.query;
+    const { search, dept, skill } = req.query;
 
     let q = supabase
       .from('users')
@@ -34,7 +46,8 @@ router.get('/mentors', auth, async (req, res) => {
       const s = likeTerm(search);
       q = q.or(`name.ilike.%${s}%,department.ilike.%${s}%,bio.ilike.%${s}%`);
     }
-    if (dept) q = q.eq('department', dept);
+    if (dept)  q = q.eq('department', dept);
+    if (skill) q = q.contains('skills', [skill]);   // mentors having this skill tag
 
     q = q.order('rating', { ascending: false });
 
@@ -101,6 +114,14 @@ router.patch('/mentorship-requests/:id', auth, async (req, res) => {
       .maybeSingle();
     if (!reqDoc) return res.status(404).json({ error: 'Request not found' });
 
+    notify({
+      userId: reqDoc.requester_id, actorId: req.user.id, type: 'mentorship',
+      entityType: 'user', entityId: req.user.id,
+      text: status === 'accepted'
+        ? 'accepted your mentorship request 🎉'
+        : 'declined your mentorship request',
+    });
+
     if (status === 'accepted') {
       const xp = await xpManager.awardXP(req.user.id, 'Accepted a mentorship request', 30, 'mentorship', reqDoc.id);
       supabase.rpc('adjust_counter', { p_table: 'users', p_id: req.user.id, p_column: 'total_students_helped', p_delta: 1 }).then(() => {}, () => {});
@@ -126,7 +147,7 @@ router.get('/me', auth, async (req, res) => {
 // Update current user's profile.
 router.put('/me', auth, async (req, res) => {
   try {
-    const { name, department, graduation_year, bio, role } = req.body;
+    const { name, department, graduation_year, bio, role, skills } = req.body;
     const update = {};
     if (name             !== undefined) update.name             = name;
     if (department       !== undefined) update.department       = department;
@@ -136,6 +157,11 @@ router.put('/me', auth, async (req, res) => {
     }
     if (bio              !== undefined) update.bio              = bio;
     if (role && ['student', 'mentor'].includes(role)) update.role = role;
+    if (Array.isArray(skills)) {
+      // Normalise: trim, drop blanks/dupes, cap at 12 tags of 30 chars.
+      update.skills = [...new Set(skills.map(s => String(s).trim()).filter(Boolean)
+                          .map(s => s.slice(0, 30)))].slice(0, 12);
+    }
 
     if (Object.keys(update).length === 0) {
       const { data: user } = await supabase
@@ -158,6 +184,27 @@ router.delete('/me', auth, async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Failed to delete account' });
   }
+});
+
+// Upload / change the current user's profile picture.
+router.post('/me/avatar', auth, (req, res) => {
+  avatarUpload.single('profile_image')(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 5 MB'
+        : uploadErr.message === 'Only image uploads are allowed' ? 'Please upload a valid image'
+        : 'Failed to upload image';
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+    try {
+      const { data: user } = await supabase
+        .from('users').update({ profile_image: fileUrl(req.file) })
+        .eq('id', req.user.id).select(PUBLIC_FIELDS).maybeSingle();
+      res.json(user);
+    } catch {
+      res.status(500).json({ error: 'Failed to update profile picture' });
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -294,6 +341,12 @@ router.post('/:id/request-mentorship', auth, async (req, res) => {
       sendMail({ to: mentor.email, ...tpl }).catch(() => {});
     }
 
+    notify({
+      userId: req.params.id, actorId: req.user.id, type: 'mentorship',
+      entityType: 'user', entityId: req.user.id,
+      text: 'requested mentorship from you',
+    });
+
     res.json({ message: 'Request sent' });
   } catch {
     res.status(500).json({ error: 'Failed to send request' });
@@ -329,6 +382,10 @@ router.post('/:id/follow', auth, async (req, res) => {
       supabase.rpc('adjust_counter', { p_table: 'users', p_id: target, p_column: 'followers_count', p_delta: 1 }),
       supabase.rpc('adjust_counter', { p_table: 'users', p_id: me,     p_column: 'following_count', p_delta: 1 }),
     ]);
+    notify({
+      userId: target, actorId: me, type: 'follow',
+      entityType: 'user', entityId: me, text: 'started following you',
+    });
     res.json({ following: true });
   } catch {
     res.status(500).json({ error: 'Failed to update follow' });

@@ -38,7 +38,16 @@ router.get('/', auth, async (req, res) => {
     const { data: events, error } = await q;
     if (error) throw error;
 
-    res.json((events || []).map(shapeEvent));
+    // Decorate with the viewer's RSVP flags.
+    const ids = (events || []).map(e => e.id);
+    let goingSet = new Set();
+    if (ids.length) {
+      const { data: rsvps } = await supabase
+        .from('event_rsvps').select('event_id')
+        .eq('user_id', req.user.id).in('event_id', ids);
+      goingSet = new Set((rsvps || []).map(r => r.event_id));
+    }
+    res.json((events || []).map(e => ({ ...shapeEvent(e), my_rsvp: goingSet.has(e.id) })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch events' });
@@ -95,6 +104,28 @@ router.delete('/:id', auth, async (req, res) => {
     res.json({ message: 'Deleted' });
   } catch {
     res.status(500).json({ error: 'Failed to delete event' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// POST /api/events/:id/rsvp   (toggle "I'm going")
+// ─────────────────────────────────────────────────────────────────────
+router.post('/:id/rsvp', auth, async (req, res) => {
+  try {
+    const { data: removed } = await supabase
+      .from('event_rsvps').delete()
+      .eq('user_id', req.user.id).eq('event_id', req.params.id)
+      .select();
+    if (removed && removed.length) {
+      await supabase.rpc('adjust_counter', { p_table: 'events', p_id: req.params.id, p_column: 'rsvp_count', p_delta: -1 });
+      return res.json({ going: false });
+    }
+    await supabase.from('event_rsvps').insert({ user_id: req.user.id, event_id: req.params.id });
+    await supabase.rpc('adjust_counter', { p_table: 'events', p_id: req.params.id, p_column: 'rsvp_count', p_delta: 1 });
+    res.json({ going: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to RSVP' });
   }
 });
 

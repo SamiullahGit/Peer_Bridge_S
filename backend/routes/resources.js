@@ -41,10 +41,42 @@ router.get('/', auth, async (req, res) => {
 
     const { data: rows, error } = await q;
     if (error) throw error;
-    res.json((rows || []).map(shapeResource));
+
+    // Decorate with the viewer's upvote flags.
+    const ids = (rows || []).map(r => r.id);
+    let votedSet = new Set();
+    if (ids.length) {
+      const { data: votes } = await supabase
+        .from('resource_votes').select('resource_id')
+        .eq('user_id', req.user.id).in('resource_id', ids);
+      votedSet = new Set((votes || []).map(v => v.resource_id));
+    }
+    res.json((rows || []).map(r => ({ ...shapeResource(r), my_voted: votedSet.has(r.id) })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch resources' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// POST /api/resources/:id/upvote   (toggle)
+// ─────────────────────────────────────────────────────────────────────
+router.post('/:id/upvote', auth, async (req, res) => {
+  try {
+    const { data: removed } = await supabase
+      .from('resource_votes').delete()
+      .eq('user_id', req.user.id).eq('resource_id', req.params.id)
+      .select();
+    if (removed && removed.length) {
+      await supabase.rpc('adjust_counter', { p_table: 'resources', p_id: req.params.id, p_column: 'upvotes_count', p_delta: -1 });
+      return res.json({ voted: false });
+    }
+    await supabase.from('resource_votes').insert({ user_id: req.user.id, resource_id: req.params.id });
+    await supabase.rpc('adjust_counter', { p_table: 'resources', p_id: req.params.id, p_column: 'upvotes_count', p_delta: 1 });
+    res.json({ voted: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to upvote' });
   }
 });
 

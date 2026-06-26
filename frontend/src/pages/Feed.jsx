@@ -7,6 +7,7 @@ import { useNotifications } from '../context/NotificationContext.jsx';
 import { useTheme }      from '../context/ThemeContext.jsx';
 import { initialsOf, avatarColors } from '../utils/avatar.js';
 import { roleLabel }     from '../utils/role.js';
+import { timeAgo }       from '../utils/time.js';
 import { toast }         from '../components/Toast.jsx';
 
 import BridgeLogo        from '../components/BridgeLogo.jsx';
@@ -22,6 +23,7 @@ import '../styles/feed.css';
 
 const FILTERS = [
   { key: 'For you',   label: 'For you' },
+  { key: 'Following', label: 'Following' },
   { key: 'Academic',  label: 'Academic' },
   { key: 'Career',    label: 'Career' },
   { key: 'Resources', label: 'Resources' },
@@ -67,6 +69,8 @@ export default function Feed() {
   const [events, setEvents]     = useState([]);
   const [mentors, setMentors]   = useState([]);
   const [filter, setFilter]     = useState('For you');
+  const [sortBy, setSortBy]     = useState('recent');   // recent | liked | discussed
+  const [sortOpen, setSortOpen] = useState(false);
   const [loading, setLoading]   = useState(true);   // initial feed load
 
   // Per-post UI state
@@ -84,12 +88,26 @@ export default function Feed() {
   // Mentor requests (for the sidebar badge)
   const [requests, setRequests] = useState([]);
 
+  // People the viewer follows (for the "Following" feed filter)
+  const [followingIds, setFollowingIds] = useState(new Set());
+
   // Search
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState(null);   // {posts,mentors,resources}
+  const [searchFocus, setSearchFocus]     = useState(false);
   const searchTimer         = useRef(null);
+  const globalTimer         = useRef(null);
 
   // ── Effects ───────────────────────────────────────────────────────
   useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, []);
+
+  // Load who I follow (once) so the "Following" filter can work.
+  useEffect(() => {
+    if (!me?.id) return;
+    pb.get(`/users/${me.id}/following`)
+      .then((list) => setFollowingIds(new Set((list || []).map((u) => u.id))))
+      .catch(() => {});
+  }, [me?.id]);
 
   useEffect(() => {
     if (!isMentor) return;
@@ -144,20 +162,42 @@ export default function Feed() {
     }
   }
 
-  // ── Filtering ─────────────────────────────────────────────────────
-  const filteredPosts = filter === 'For you'
-    ? posts
-    : posts.filter((p) => p.tag.toLowerCase().includes(filter.toLowerCase()));
+  // ── Filtering + sorting ───────────────────────────────────────────
+  const SORT_LABELS = { recent: 'Recent', liked: 'Most liked', discussed: 'Most discussed' };
+
+  const base =
+    filter === 'For you'   ? posts :
+    filter === 'Following' ? posts.filter((p) => followingIds.has(p.author_id)) :
+    posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()));
+
+  const filteredPosts = base.slice().sort((a, b) => {
+    if (sortBy === 'liked')     return (b.likes_count    || 0) - (a.likes_count    || 0);
+    if (sortBy === 'discussed') return (b.comments_count || 0) - (a.comments_count || 0);
+    return new Date(b.created_at) - new Date(a.created_at);   // recent
+  });
 
   // ── Action handlers ───────────────────────────────────────────────
   function debounceSearch(val) {
     clearTimeout(searchTimer.current);
+    clearTimeout(globalTimer.current);
     setSearch(val);
+    // Searching across all tags — reset the active tab so matches aren't
+    // hidden by a category filter.
+    if (val.trim()) setFilter('For you');
+    else setSearchResults(null);
+
     searchTimer.current = setTimeout(async () => {
       if (!val.trim()) return loadAll();
       try { setPosts(await pb.get('/posts?search=' + encodeURIComponent(val))); }
       catch { /* silent */ }
     }, 400);
+
+    // Global dropdown (posts + mentors + resources).
+    globalTimer.current = setTimeout(async () => {
+      if (val.trim().length < 2) { setSearchResults(null); return; }
+      try { setSearchResults(await pb.get('/search?q=' + encodeURIComponent(val))); }
+      catch { /* silent */ }
+    }, 350);
   }
 
   async function deletePost(id) {
@@ -231,6 +271,20 @@ export default function Feed() {
     }
   }
 
+  // Nested reply (reply-to-reply). Returns the created reply for optimistic UI.
+  async function nestedReply(postId, text, parentId) {
+    const t = (text || '').trim();
+    if (!t) return;
+    try {
+      const reply = await pb.post(`/posts/${postId}/replies`, { text: t, parent_id: parentId });
+      setPosts((prev) => prev.map((p) => p.id === postId
+        ? { ...p, replies: [...(p.replies || []), reply], comments_count: (p.comments_count || 0) + 1 }
+        : p));
+    } catch {
+      toast('Failed to post reply');
+    }
+  }
+
   function shareLink(id) {
     navigator.clipboard?.writeText(`${location.origin}/?p=${id}`)
       .then(() => toast('Link copied!'));
@@ -295,7 +349,7 @@ export default function Feed() {
             <span>Peer Bridge</span>
           </Link>
 
-          <div className="search-bar">
+          <div className="search-bar" style={{ position: 'relative' }}>
             <svg width="15" height="15" viewBox="0 0 15 15" fill="none"
                  stroke="rgba(255,255,255,.5)" strokeWidth="1.6" strokeLinecap="round">
               <circle cx="6.5" cy="6.5" r="5" /><path d="M11 11l3 3" />
@@ -303,7 +357,17 @@ export default function Feed() {
             <input
               type="text" placeholder="Search posts, mentors, resources…"
               value={search} onChange={(e) => debounceSearch(e.target.value)}
+              onFocus={() => setSearchFocus(true)}
+              onBlur={() => setTimeout(() => setSearchFocus(false), 180)}
             />
+            {searchFocus && searchResults && search.trim().length >= 2 && (
+              <GlobalSearchDropdown
+                results={searchResults}
+                onPost={() => { setSearchFocus(false); }}
+                onMentor={(id) => { setSearchFocus(false); navigate(`/profile?id=${id}`); }}
+                onResource={() => { setSearchFocus(false); navigate('/resources'); }}
+              />
+            )}
           </div>
 
           <div className="topnav-right">
@@ -377,50 +441,68 @@ export default function Feed() {
                 onClick={() => setFilter(f.key)}
               >{f.label}</button>
             ))}
-            <button className="sort-btn">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
-                   stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <path d="M1 3h11M3 6.5h7M5 10h3" />
-              </svg>
-              Sort: Recent
-            </button>
+            <div className="sort-wrap" style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button className="sort-btn" style={{ marginLeft: 0 }} onClick={() => setSortOpen((o) => !o)}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
+                     stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M1 3h11M3 6.5h7M5 10h3" />
+                </svg>
+                Sort: {SORT_LABELS[sortBy]}
+              </button>
+              {sortOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setSortOpen(false)} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 301,
+                    minWidth: 180, background: 'var(--card)', border: '1.5px solid var(--line)',
+                    borderRadius: 10, boxShadow: 'var(--shadow-lg, 0 16px 40px rgba(0,0,0,.2))',
+                    overflow: 'hidden', padding: 4,
+                  }}>
+                    {Object.entries(SORT_LABELS).map(([key, label]) => (
+                      <button key={key}
+                        onClick={() => { setSortBy(key); setSortOpen(false); }}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '8px 12px',
+                          borderRadius: 7, border: 'none', cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: 13, fontWeight: sortBy === key ? 700 : 500,
+                          background: sortBy === key ? 'var(--blue-soft)' : 'transparent',
+                          color: sortBy === key ? 'var(--blue)' : 'var(--ink-2)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                        }}>
+                        {label}
+                        {sortBy === key && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                               stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="composer-card">
-            <div className="composer-top" onClick={() => openComposer()}>
-              {me?.profile_image
-                ? <img src={me.profile_image} alt={me.name}
-                       style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                : <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
-                  }}>{initials}</div>}
-              <span className="composer-placeholder">What's on your mind? Ask or share something…</span>
-            </div>
-            <div className="composer-bottom">
-              <button className="composer-action-btn" onClick={() => openComposer('Academic Help')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                Ask
-              </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Career & Internships')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                Career
-              </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Resources')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                Resource
-              </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Events & Societies')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Event
-              </button>
-              <button className="composer-action-btn composer-action-anon" onClick={() => openComposer('Academic Help', true)}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                Anonymous
-              </button>
-            </div>
+          <div className="composer-card composer-card-v2 composer-clean" onClick={() => openComposer()}>
+            {me?.profile_image
+              ? <img src={me.profile_image} alt={me.name}
+                     style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              : <div style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 700, color: 'white', flexShrink: 0,
+                }}>{initials}</div>}
+            <span className="composer-placeholder">
+              Share a question, insight, or update…
+            </span>
+            <span className="composer-write-chip">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+              Write
+            </span>
           </div>
 
           {loading ? (
@@ -434,10 +516,10 @@ export default function Feed() {
                   <path d="M7 3H24v22H7A3 3 0 014 22V6a3 3 0 013-3z" />
                 </svg>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#0D1B2A', marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
                 Your feed is quiet right now
               </div>
-              <p style={{ fontSize: 14, color: '#4B5C73', maxWidth: 280, lineHeight: 1.65 }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-2)', maxWidth: 280, lineHeight: 1.65 }}>
                 Be the first to ask a question or share something useful with your NUST community.
               </p>
               <button onClick={() => openComposer()} style={{
@@ -460,6 +542,7 @@ export default function Feed() {
                 onToggleReplies={toggleReplies}
                 onReplyDraftChange={setReplyDraft}
                 onPostReply={postReply}
+                onNestedReply={nestedReply}
                 onMessageAuthor={(id, name) => setChatPeer({ id, name })}
                 onReport={(type, id) => setReportTarget({ type, id })}
                 onShare={shareLink}
@@ -544,7 +627,10 @@ export default function Feed() {
             <div className="panel-card-header">
               <div className="panel-card-title">Trending topics</div>
             </div>
-            <div>{TRENDING.map((t) => <span key={t} className="topic-pill">{t}</span>)}</div>
+            <div>{TRENDING.map((t) => (
+              <span key={t} className="topic-pill" style={{ cursor: 'pointer' }}
+                    onClick={() => debounceSearch(t.replace(/^#/, ''))}>{t}</span>
+            ))}</div>
           </div>
         </aside>
       </div>
@@ -679,10 +765,25 @@ function FeedSidebar({ isMentor, requestsCount, unreadMsgs, onToggle, onLogout, 
 /* ── Notification bell (topnav) ─────────────────────────────────── */
 
 function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]     = useState(false);
+  const [notifs, setNotifs] = useState([]);
+  const [notifUnread, setNotifUnread] = useState(0);
   const wrapRef = useRef(null);
 
   const unreadConvos = convos.filter(c => c.unread > 0);
+  const totalUnread  = unreadMsgs + notifUnread;
+
+  // Poll the unread activity count every 30s.
+  useEffect(() => {
+    let alive = true;
+    async function tick() {
+      try { const r = await pb.get('/notifications/unread-count'); if (alive) setNotifUnread(r.unread || 0); }
+      catch { /* silent */ }
+    }
+    tick();
+    const t = setInterval(tick, 30000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
 
   // Close dropdown when clicking outside.
   useEffect(() => {
@@ -693,28 +794,42 @@ function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
     return () => document.removeEventListener('mousedown', onDown);
   }, []);
 
+  async function openDropdown() {
+    const next = !open;
+    setOpen(next);
+    if (next) {
+      try {
+        const r = await pb.get('/notifications');
+        setNotifs(r.items || []);
+        if ((r.unread || 0) > 0) { await pb.post('/notifications/read', {}); setNotifUnread(0); }
+      } catch { /* silent */ }
+    }
+  }
+
   function goToConvo(c) {
     setOpen(false);
     onMarkRead();
     onNavigate(`/messages?to=${c.id}&name=${encodeURIComponent(c.name)}`);
   }
 
-  function goToAllMessages() {
+  function goToNotif(n) {
     setOpen(false);
-    onMarkRead();
-    onNavigate('/messages');
+    if (n.entity_type === 'post')  onNavigate('/feed');
+    else if (n.entity_type === 'user')  onNavigate(`/profile?id=${n.entity_id}`);
+    else if (n.entity_type === 'group') onNavigate('/groups');
+    else if (n.entity_type === 'event') onNavigate('/events');
   }
 
   return (
     <div className="notif-bell-wrap" ref={wrapRef}>
-      <button className="notif-bell-btn" onClick={() => setOpen(o => !o)} title="Notifications">
+      <button className="notif-bell-btn" onClick={openDropdown} title="Notifications">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        {unreadMsgs > 0 && (
-          <span className="notif-bell-badge">{unreadMsgs > 9 ? '9+' : unreadMsgs}</span>
+        {totalUnread > 0 && (
+          <span className="notif-bell-badge">{totalUnread > 9 ? '9+' : totalUnread}</span>
         )}
       </button>
 
@@ -722,35 +837,122 @@ function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
         <div className="notif-dropdown">
           <div className="notif-dropdown-head">
             <span className="notif-dropdown-title">Notifications</span>
-            {unreadMsgs > 0 && (
-              <span style={{ fontSize: 11, color: '#8899B0' }}>{unreadMsgs} unread</span>
+            {totalUnread > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{totalUnread} unread</span>
             )}
           </div>
 
-          {unreadConvos.length === 0 ? (
+          {unreadConvos.length === 0 && notifs.length === 0 ? (
             <div className="notif-dropdown-empty">You're all caught up!</div>
           ) : (
-            unreadConvos.map(c => {
-              const [bg, fg] = avatarColors(c.name);
-              return (
-                <div key={c.id} className="notif-row" onClick={() => goToConvo(c)}>
-                  <div className="notif-row-av" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)`, color: fg }}>
-                    {initialsOf(c.name)}
+            <>
+              {unreadConvos.map(c => {
+                const [bg, fg] = avatarColors(c.name);
+                return (
+                  <div key={`m-${c.id}`} className="notif-row" onClick={() => goToConvo(c)}>
+                    <div className="notif-row-av" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)`, color: fg }}>
+                      {initialsOf(c.name)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="notif-row-name">{c.name}</div>
+                      <div className="notif-row-preview">{c.last_message || 'New message'}</div>
+                    </div>
+                    <span className="notif-count-badge">{c.unread}</span>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="notif-row-name">{c.name}</div>
-                    <div className="notif-row-preview">{c.last_message || 'New message'}</div>
+                );
+              })}
+              {notifs.map(n => {
+                const [bg, fg] = avatarColors(n.actor_name || '?');
+                return (
+                  <div key={n.id} className="notif-row"
+                       style={{ opacity: n.is_read ? 0.72 : 1 }}
+                       onClick={() => goToNotif(n)}>
+                    <div className="notif-row-av" style={{ background: `linear-gradient(135deg,${bg},${bg}cc)`, color: fg }}>
+                      {initialsOf(n.actor_name || '?')}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="notif-row-preview" style={{ whiteSpace: 'normal' }}>
+                        <strong style={{ color: 'var(--ink)' }}>{n.actor_name || 'Someone'}</strong> {n.text}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{timeAgo(n.created_at)}</div>
+                    </div>
                   </div>
-                  <span className="notif-count-badge">{c.unread}</span>
-                </div>
-              );
-            })
+                );
+              })}
+            </>
           )}
 
           <div className="notif-dropdown-footer">
-            <button onClick={goToAllMessages}>View all messages</button>
+            <button onClick={() => { setOpen(false); onMarkRead(); onNavigate('/messages'); }}>View all messages</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function GlobalSearchDropdown({ results, onPost, onMentor, onResource }) {
+  const { posts = [], mentors = [], resources = [] } = results || {};
+  const empty = !posts.length && !mentors.length && !resources.length;
+
+  const wrap = {
+    position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 80,
+    background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 12,
+    boxShadow: '0 16px 48px rgba(0,0,0,.22)', overflow: 'hidden', maxHeight: 420, overflowY: 'auto',
+    minWidth: 320,
+  };
+  const head = { padding: '8px 14px 4px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
+                 textTransform: 'uppercase', color: 'var(--ink-3)' };
+  const row  = { display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px',
+                 cursor: 'pointer', fontSize: 13, color: 'var(--ink)' };
+
+  return (
+    <div style={wrap} onMouseDown={(e) => e.preventDefault()}>
+      {empty ? (
+        <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--ink-3)' }}>No matches found</div>
+      ) : (
+        <>
+          {mentors.length > 0 && <div style={head}>Mentors</div>}
+          {mentors.map(m => {
+            const [bg, fg] = avatarColors(m.name);
+            return (
+              <div key={`u-${m.id}`} style={row} className="gs-row" onClick={() => onMentor(m.id)}>
+                <div style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                              background: `linear-gradient(135deg,${bg},${bg}cc)`, color: fg,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 12, fontWeight: 700 }}>{initialsOf(m.name)}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{m.department || 'Mentor'}</div>
+                </div>
+              </div>
+            );
+          })}
+          {posts.length > 0 && <div style={head}>Posts</div>}
+          {posts.map(p => (
+            <div key={`p-${p.id}`} style={row} className="gs-row" onClick={onPost}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.title}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{p.tag} · {p.author_name}</div>
+              </div>
+            </div>
+          ))}
+          {resources.length > 0 && <div style={head}>Resources</div>}
+          {resources.map(r => (
+            <div key={`r-${r.id}`} style={row} className="gs-row" onClick={onResource}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
+              </svg>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.title}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--ink-3)' }}>{r.category || 'Resource'}{r.course_code ? ` · ${r.course_code}` : ''}</div>
+              </div>
+            </div>
+          ))}
+        </>
       )}
     </div>
   );

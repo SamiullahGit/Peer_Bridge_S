@@ -37,6 +37,19 @@ export default function Resources() {
     debounceRef.current = setTimeout(loadResources, 400);
   }
 
+  async function toggleUpvote(id) {
+    // Optimistic toggle of my_voted + upvotes_count.
+    setResources(prev => prev.map(r => r.id === id
+      ? { ...r, my_voted: !r.my_voted, upvotes_count: (r.upvotes_count || 0) + (r.my_voted ? -1 : 1) }
+      : r));
+    try { await pb.post(`/resources/${id}/upvote`, {}); }
+    catch {
+      setResources(prev => prev.map(r => r.id === id
+        ? { ...r, my_voted: !r.my_voted, upvotes_count: (r.upvotes_count || 0) + (r.my_voted ? -1 : 1) }
+        : r));
+    }
+  }
+
   async function handleUpload(e) {
     e.preventDefault();
     const form = new FormData(e.target);
@@ -178,10 +191,29 @@ export default function Resources() {
                     </div>
                   </div>
                 </div>
-                <button
-                  className="btn btn-ghost" style={{ padding: '7px 12px', fontSize: 12.5 }}
-                  onClick={() => downloadResource(r.id, r.file_name || 'file')}
-                >Download</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => toggleUpvote(r.id)}
+                    title={r.my_voted ? 'Remove upvote' : 'Upvote this resource'}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '7px 11px', borderRadius: 8, cursor: 'pointer',
+                      fontFamily: 'inherit', fontSize: 12.5, fontWeight: 700,
+                      border: `1.5px solid ${r.my_voted ? 'var(--blue)' : 'var(--line)'}`,
+                      background: r.my_voted ? 'var(--blue-soft)' : 'transparent',
+                      color: r.my_voted ? 'var(--blue)' : 'var(--ink-2)',
+                    }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 19V5M5 12l7-7 7 7" />
+                    </svg>
+                    {r.upvotes_count || 0}
+                  </button>
+                  <button
+                    className="btn btn-ghost" style={{ padding: '7px 12px', fontSize: 12.5 }}
+                    onClick={() => downloadResource(r.id, r.file_name || 'file')}
+                  >Download</button>
+                </div>
               </div>
             </div>
           ))}

@@ -29,8 +29,20 @@ export default function Messages() {
   const [msgs, setMsgs]         = useState([]);
   const [draft, setDraft]       = useState('');
   const [search, setSearch]     = useState('');
+  const [attach, setAttach]     = useState(null);   // { file, kind }
+  const [replyTo, setReplyTo]   = useState(null);   // message being replied to
   const pollRef     = useRef(null);
   const scrollRef   = useRef(null);
+  const fileRef     = useRef(null);
+
+  function onPickFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { toast('File must be under 15 MB'); return; }
+    const kind = f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audio' : 'file';
+    setAttach({ file: f, kind });
+    e.target.value = '';
+  }
 
   useEffect(() => { loadConvos(); /* eslint-disable-next-line */ }, []);
   useEffect(() => {
@@ -71,15 +83,29 @@ export default function Messages() {
 
   async function sendMsg() {
     const text = draft.trim();
-    if (!text || !activeId) return;
+    if ((!text && !attach) || !activeId) return;
     setDraft('');
+    const sending = attach;
+    const replyId = replyTo?.id || null;
+    setAttach(null); setReplyTo(null);
     try {
-      const m = await pb.post(`/messages/${activeId}`, { text });
+      let m;
+      if (sending) {
+        const fd = new FormData();
+        if (text) fd.append('text', text);
+        if (replyId) fd.append('reply_to', replyId);
+        fd.append('attachment', sending.file, sending.file.name);
+        m = await pb.upload(`/messages/${activeId}`, fd);
+      } else {
+        m = await pb.post(`/messages/${activeId}`, { text, reply_to: replyId });
+      }
       setMsgs((prev) => [...prev, m]);
       loadConvos();
     } catch {
       toast('Failed to send');
       setDraft(text);
+      setAttach(sending);
+      if (replyId) setReplyTo(replyTo);
     }
   }
 
@@ -146,19 +172,82 @@ export default function Messages() {
 
                 <div className="chat-msgs" ref={scrollRef}>
                   <div className="chat-date-divider">Today</div>
-                  {msgs.map((m) => (
-                    <div key={m.id}
-                         className={`bubble ${m.sender_id === me?.id ? 'bubble-me' : 'bubble-them'}`}>
-                      {m.text}
-                      <div className="bubble-time"
-                           style={{ textAlign: m.sender_id === me?.id ? 'right' : 'left' }}>
-                        {timeAgo(m.created_at)}
+                  {msgs.map((m) => {
+                    const mine   = m.sender_id === me?.id;
+                    const parent = m.reply_to ? msgs.find((x) => x.id === m.reply_to) : null;
+                    return (
+                      <div key={m.id} className={`bubble-row${mine ? ' mine' : ''}`}>
+                        <div className={`bubble ${mine ? 'bubble-me' : 'bubble-them'}`}>
+                          {parent && <QuotedReply m={parent} mine={mine} />}
+                          {m.attachment_url && <Attachment m={m} />}
+                          {m.text}
+                          <div className="bubble-time"
+                               style={{ textAlign: mine ? 'right' : 'left' }}>
+                            {timeAgo(m.created_at)}
+                          </div>
+                        </div>
+                        <button className="bubble-reply-btn" title="Reply" onClick={() => setReplyTo(m)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                          </svg>
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
+                {replyTo && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 14px', margin: '0 14px',
+                    background: 'var(--bg-2)', borderLeft: '3px solid var(--blue)',
+                    borderRadius: 8, fontSize: 13,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}>
+                        Replying to {replyTo.sender_id === me?.id ? 'yourself' : activeName}
+                      </div>
+                      <div style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {replyTo.text || (replyTo.attachment_type === 'image' ? '📷 Photo'
+                          : replyTo.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment')}
+                      </div>
+                    </div>
+                    <button onClick={() => setReplyTo(null)} style={{
+                      border: 'none', background: 'transparent', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 17,
+                    }}>×</button>
+                  </div>
+                )}
+                {attach && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 14px', margin: '0 14px',
+                    background: 'var(--blue-soft)', border: '1px solid var(--blue-mid)',
+                    borderRadius: 10, fontSize: 13,
+                  }}>
+                    <span style={{ fontSize: 16 }}>
+                      {attach.kind === 'image' ? '🖼️' : attach.kind === 'audio' ? '🎙️' : '📎'}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--ink)', fontWeight: 600,
+                                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {attach.file.name}
+                    </span>
+                    <button onClick={() => setAttach(null)} style={{
+                      border: 'none', background: 'transparent', color: 'var(--ink-3)',
+                      cursor: 'pointer', fontSize: 17, lineHeight: 1,
+                    }}>×</button>
+                  </div>
+                )}
                 <div className="chat-input-bar">
+                  <input ref={fileRef} type="file" style={{ display: 'none' }}
+                         accept="image/*,audio/*,.pdf,.doc,.docx,.zip,.txt" onChange={onPickFile} />
+                  <button className="chat-attach-btn" onClick={() => fileRef.current?.click()} title="Attach a file">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                  </button>
+                  <VoiceRecorder onRecorded={(file) => setAttach({ file, kind: 'audio' })} />
                   <input
                     className="chat-input-field" placeholder="Type a message…"
                     value={draft} onChange={(e) => setDraft(e.target.value)}
@@ -182,6 +271,101 @@ export default function Messages() {
 }
 
 /* ── Bits ────────────────────────────────────────────────────────── */
+
+// Small quoted preview of the message being replied to, shown inside a bubble.
+export function QuotedReply({ m, mine }) {
+  const label = m.text || (m.attachment_type === 'image' ? '📷 Photo'
+    : m.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment');
+  return (
+    <div style={{
+      borderLeft: `3px solid ${mine ? 'rgba(255,255,255,.6)' : 'var(--blue)'}`,
+      background: mine ? 'rgba(255,255,255,.14)' : 'var(--bg-2)',
+      borderRadius: 6, padding: '5px 9px', marginBottom: 6,
+      fontSize: 12.5, maxWidth: '100%',
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 11, opacity: .85, marginBottom: 1 }}>
+        {m.sender_name || 'Reply'}
+      </div>
+      <div style={{ opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+    </div>
+  );
+}
+
+// Render a message attachment: image preview, audio player, or file chip.
+export function Attachment({ m }) {
+  const url = m.attachment_url;
+  if (m.attachment_type === 'image') {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: m.text ? 8 : 4 }}>
+        <img src={url} alt={m.attachment_name || 'image'}
+             style={{ maxWidth: 240, maxHeight: 240, borderRadius: 10, display: 'block', objectFit: 'cover' }} />
+      </a>
+    );
+  }
+  if (m.attachment_type === 'audio') {
+    return <audio controls src={url} style={{ display: 'block', marginBottom: m.text ? 8 : 4, maxWidth: 240, height: 38 }} />;
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer"
+       style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: m.text ? 8 : 4,
+                padding: '8px 11px', borderRadius: 9, background: 'rgba(127,127,127,.12)',
+                textDecoration: 'none', color: 'inherit', maxWidth: 240 }}>
+      <span style={{ fontSize: 18 }}>📎</span>
+      <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {m.attachment_name || 'Download file'}
+      </span>
+    </a>
+  );
+}
+
+// Voice-note recorder using the MediaRecorder API. Produces an audio File.
+export function VoiceRecorder({ onRecorded }) {
+  const [recording, setRecording] = useState(false);
+  const recRef   = useRef(null);
+  const chunksRef = useRef([]);
+
+  async function start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size) chunksRef.current.push(e.data); };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' });
+        onRecorded(file);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      rec.start();
+      recRef.current = rec;
+      setRecording(true);
+    } catch {
+      toast('Microphone permission denied');
+    }
+  }
+  function stop() {
+    recRef.current?.stop();
+    setRecording(false);
+  }
+
+  return (
+    <button
+      className="chat-attach-btn"
+      onClick={recording ? stop : start}
+      title={recording ? 'Stop recording' : 'Record a voice note'}
+      style={recording ? { color: '#ef4444' } : undefined}
+    >
+      {recording ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+      ) : (
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+          <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" />
+        </svg>
+      )}
+    </button>
+  );
+}
 
 function ConvoItem({ c, active, onClick }) {
   return (
@@ -214,7 +398,7 @@ function Bubble({ name = '?', size = 38, online = false }) {
         <span style={{
           position: 'absolute', bottom: 0, right: 0,
           width: Math.round(size * 0.28), height: Math.round(size * 0.28),
-          borderRadius: '50%', background: '#22c55e', border: '2px solid #fff',
+          borderRadius: '50%', background: '#22c55e', border: '2px solid var(--card)',
         }} />
       )}
     </div>

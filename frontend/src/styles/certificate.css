@@ -203,6 +203,8 @@
 [data-theme="dark"] .xp-locked-msg        { background: var(--gold-soft); border-color: rgba(251,191,36,.3); color: var(--gold-ink); }
 [data-theme="dark"] .xp-cooldown-msg      { background: var(--blue-soft); border-color: var(--blue-mid); color: var(--blue); }
 [data-theme="dark"] .cert-modal           { background: var(--card); }
+[data-theme="dark"] .cert-copy-btn        { background: var(--bg-2); color: var(--ink-2); border-color: var(--line); }
+[data-theme="dark"] .xp-history-title     { color: var(--ink-2); }
 
 .cert-modal-header {
   background: linear-gradient(135deg, #0a1e3d, #1a3a6c);

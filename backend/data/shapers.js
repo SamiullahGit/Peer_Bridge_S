@@ -80,7 +80,7 @@ function shapeMessage(m) {
 const PUBLIC_FIELDS =
   'id, name, role, department, graduation_year, bio, profile_image, rating, ' +
   'rating_count, sessions_count, is_online, is_locked, is_under_review, ' +
-  'created_at, total_xp, xp_level, email, followers_count, following_count';
+  'created_at, total_xp, xp_level, email, followers_count, following_count, skills';
 
 // Strip sensitive fields from a full user row (parity with toSafeJSON()).
 function toSafeUser(u) {

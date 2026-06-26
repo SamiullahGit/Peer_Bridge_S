@@ -17,6 +17,31 @@ import FollowListModal from '../components/FollowListModal.jsx';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
+// Animated count-up: eases from 0 to `target` over `dur` ms.
+function useCountUp(target = 0, dur = 900) {
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    let raf, start;
+    const from = 0, to = Number(target) || 0;
+    if (to === 0) { setN(0); return; }
+    function tick(t) {
+      if (!start) start = t;
+      const p = Math.min((t - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);   // easeOutCubic
+      setN(Math.round(from + (to - from) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, dur]);
+  return n;
+}
+
+function CountUp({ value, dur }) {
+  const n = useCountUp(value, dur);
+  return <>{n}</>;
+}
+
 export default function Profile() {
   const { user: me, setAuth, token, logout } = useAuth();
   const navigate     = useNavigate();
@@ -34,8 +59,16 @@ export default function Profile() {
 
   const [showReport, setShowReport] = useState(false);
   const [followModal, setFollowModal] = useState(null);   // 'followers' | 'following' | null
+  const [postTab, setPostTab] = useState('all');          // 'all' | 'media'
 
   useEffect(() => { loadProfile(); /* eslint-disable-next-line */ }, [profileId]);
+
+  function shareProfile() {
+    const url = `${location.origin}/profile?id=${profileId}`;
+    navigator.clipboard?.writeText(url)
+      .then(() => toast('Profile link copied!'))
+      .catch(() => toast(url));
+  }
 
   async function toggleFollow() {
     // Optimistic update; reload from server on failure.
@@ -59,6 +92,7 @@ export default function Profile() {
       setEdit({
         name: p.name, dept: p.department || '', bio: p.bio || '',
         year: p.graduation_year || '', role: p.role,
+        skills: Array.isArray(p.skills) ? p.skills : [],
       });
     } catch {
       toast('Failed to load profile');
@@ -73,6 +107,7 @@ export default function Profile() {
         graduation_year: edit.year || null,
         bio            : edit.bio,
         role           : edit.role,
+        skills         : edit.skills || [],
       });
       setAuth(token, { ...me, ...updated });
       setProfile((prev) => ({ ...prev, ...updated }));
@@ -127,6 +162,26 @@ export default function Profile() {
     }
   }
 
+  const [uploadingPic, setUploadingPic] = useState(false);
+  async function uploadAvatar(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Please choose an image'); return; }
+    if (file.size > 5 * 1024 * 1024)     { toast('Image must be under 5 MB'); return; }
+    setUploadingPic(true);
+    try {
+      const fd = new FormData();
+      fd.append('profile_image', file);
+      const updated = await pb.upload('/users/me/avatar', fd);
+      setAuth(token, { ...me, ...updated });
+      setProfile((prev) => ({ ...prev, ...updated }));
+      toast('Profile picture updated!');
+    } catch (e) {
+      toast(e.message || 'Failed to upload picture');
+    } finally {
+      setUploadingPic(false);
+    }
+  }
+
   if (!profile) {
     return (
       <Sidebar active="profile">
@@ -156,16 +211,31 @@ export default function Profile() {
 
         {/* Profile header card */}
         <div className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)' }}>
-            <button onClick={() => history.back()} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: 0, border: 'none', background: 'none',
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--blue)', cursor: 'pointer',
-            }}>&larr; Back</button>
-          </div>
-          <div style={{ padding: 32, display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
-            <Avatar name={p.name} size={80} imgUrl={p.profile_image || ''} />
-            <div style={{ flex: 1, minWidth: 200 }}>
+          {/* Animated gradient cover */}
+          <div className="profile-cover" />
+          <div style={{ padding: '0 32px 32px', display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
+            <div className="profile-avatar-wrap" style={{ position: 'relative' }}>
+              <Avatar name={p.name} size={88} imgUrl={p.profile_image || ''} />
+              {isSelf && (
+                <label title="Change profile picture" style={{
+                  position: 'absolute', bottom: 2, right: 2, width: 30, height: 30,
+                  borderRadius: '50%', background: 'var(--blue)', border: '3px solid var(--card)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: uploadingPic ? 'wait' : 'pointer',
+                }}>
+                  {uploadingPic ? (
+                    <span style={{ color: '#fff', fontSize: 11 }}>…</span>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                    </svg>
+                  )}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                         disabled={uploadingPic}
+                         onChange={(e) => uploadAvatar(e.target.files?.[0])} />
+                </label>
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 200, paddingTop: 18 }}>
               {editMode
                 ? <EditForm
                     edit={edit} setEdit={setEdit}
@@ -181,10 +251,14 @@ export default function Profile() {
                     onFollow={toggleFollow}
                     onShowFollowers={() => setFollowModal('followers')}
                     onShowFollowing={() => setFollowModal('following')}
+                    onShare={shareProfile}
                   />}
             </div>
           </div>
         </div>
+
+        {/* Profile completeness (own profile only, while incomplete) */}
+        {isSelf && <CompletenessCard p={p} onEdit={() => setEditMode(true)} onAddPhoto={() => {}} />}
 
         {/* XP & Certificate (own profile only) */}
         {isSelf && (
@@ -195,20 +269,40 @@ export default function Profile() {
 
         {/* Posts */}
         <div className="card" style={{ padding: 22 }}>
-          <div className="serif" style={{ fontSize: 22, marginBottom: 16 }}>
-            {isSelf ? 'Your posts' : `Posts by ${p.name}`}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div className="serif" style={{ fontSize: 22 }}>
+              {isSelf ? 'Your posts' : `Posts by ${p.name}`}
+            </div>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', borderRadius: 9, padding: 3 }}>
+              {[['all', 'All'], ['media', 'Media']].map(([k, label]) => (
+                <button key={k} onClick={() => setPostTab(k)} style={{
+                  padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                  background: postTab === k ? 'var(--card)' : 'transparent',
+                  color: postTab === k ? 'var(--ink)' : 'var(--ink-3)',
+                  boxShadow: postTab === k ? 'var(--shadow-sm)' : 'none',
+                }}>{label}</button>
+              ))}
+            </div>
           </div>
-          {(p.posts || []).length === 0
-            ? <div className="empty-state"><p>No posts yet</p></div>
-            : (p.posts || []).map((post) => (
+          {(() => {
+            const shown = postTab === 'media'
+              ? (p.posts || []).filter((post) => post.image_path)
+              : (p.posts || []);
+            return shown.length === 0
+              ? <div className="empty-state"><p>{postTab === 'media' ? 'No posts with images yet' : 'No posts yet'}</p></div>
+              : shown.map((post, i) => (
                 <PostRow
                   key={post.id}
                   post={post}
+                  index={i}
                   isSelf={isSelf}
                   onDelete={deletePost}
                   onUpdate={updatePost}
                 />
-              ))}
+              ));
+          })()}
         </div>
       </div>
 
@@ -244,7 +338,64 @@ export default function Profile() {
 
 /* ── Sub-components ──────────────────────────────────────────────── */
 
-function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing }) {
+// Profile completeness nudge — only shown to the owner while < 100%.
+function CompletenessCard({ p, onEdit }) {
+  const checks = [
+    { ok: !!p.profile_image, label: 'Add a profile picture' },
+    { ok: !!(p.bio && p.bio.trim()), label: 'Write a short bio' },
+    { ok: Array.isArray(p.skills) && p.skills.length > 0, label: 'Add skills & expertise' },
+    { ok: !!p.department, label: 'Set your department' },
+    { ok: !!p.graduation_year, label: 'Add your graduation year' },
+  ];
+  const done = checks.filter((c) => c.ok).length;
+  const pct  = Math.round((done / checks.length) * 100);
+  if (pct === 100) return null;
+
+  return (
+    <div className="card fade-up" style={{ padding: 20, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Complete your profile</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 2 }}>A complete profile gets more connections.</div>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--blue)' }}><CountUp value={pct} />%</div>
+      </div>
+      <div style={{ height: 8, borderRadius: 999, background: 'var(--bg-2)', overflow: 'hidden', marginBottom: 14 }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999,
+                      background: 'linear-gradient(90deg,#2563EB,#7C3AED)', transition: 'width .6s ease' }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {checks.filter((c) => !c.ok).map((c) => (
+          <button key={c.label} onClick={onEdit} style={{
+            display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 9,
+            border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 13, color: 'var(--ink-2)', textAlign: 'left',
+          }}>
+            <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--line-2)', flexShrink: 0 }} />
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, text, delay = 0, accent = 'var(--blue)' }) {
+  return (
+    <div className="profile-stat-card stat-pop" style={{
+      minWidth: 84, padding: '10px 14px', borderRadius: 12,
+      border: '1.5px solid var(--line)', background: 'var(--card)',
+      animationDelay: `${delay}ms`,
+    }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: accent, lineHeight: 1.1 }}>
+        {text !== undefined ? text : <CountUp value={value} />}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ink-3)', fontWeight: 600, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+}
+
+function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing, onShare }) {
   const statBtn = {
     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
     font: 'inherit', fontSize: 13.5, color: 'var(--ink-2)',
@@ -258,13 +409,21 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
           <VerifiedBadge p={p} />
         </div>
 
-        <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+        <div style={{ display: 'flex', gap: 20, marginBottom: 12 }}>
           <button type="button" onClick={onShowFollowers} style={statBtn}>
-            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.followers_count || 0}</strong> followers
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}><CountUp value={p.followers_count || 0} /></strong> followers
           </button>
           <button type="button" onClick={onShowFollowing} style={statBtn}>
-            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}>{p.following_count || 0}</strong> following
+            <strong style={{ color: 'var(--ink)', fontWeight: 700 }}><CountUp value={p.following_count || 0} /></strong> following
           </button>
+        </div>
+
+        {/* Animated stat cards */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+          <StatCard label="Total XP"  value={p.total_xp || 0} delay={0}   accent="var(--gold-ink)" />
+          <StatCard label="Level"     text={p.xp_level || 'Bronze'} delay={80} accent="var(--blue)" />
+          {isMentor && <StatCard label="Sessions" value={p.sessions_count || 0} delay={160} accent="var(--mint-ink)" />}
+          {isMentor && <StatCard label="Rating"   text={Number(p.rating || 0).toFixed(1)} delay={240} accent="var(--gold-ink)" />}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <span className="tag tag-lav">{roleLabel(p.role)}</span>
@@ -288,8 +447,27 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
         {p.bio
           ? <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 500 }}>{p.bio}</p>
           : <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)', fontStyle: 'italic' }}>No bio yet.</p>}
+        {Array.isArray(p.skills) && p.skills.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12, maxWidth: 500 }}>
+            {p.skills.map((s) => (
+              <span key={s} style={{
+                padding: '4px 11px', borderRadius: 999,
+                background: 'var(--blue-soft)', color: 'var(--blue)',
+                fontSize: 12, fontWeight: 600,
+              }}>{s}</span>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button className="btn btn-ghost" onClick={onShare} style={{ padding: '10px 16px', fontSize: 13.5,
+                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
+          </svg>
+          Share
+        </button>
         {isSelf ? (
           <button className="btn btn-ghost" onClick={onEdit} style={{ padding: '10px 16px', fontSize: 13.5 }}>Edit profile</button>
         ) : (
@@ -355,6 +533,10 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
         onChange={(e) => setEdit((p) => ({ ...p, bio: e.target.value }))}
         style={{ resize: 'vertical' }}
       />
+      <SkillsEditor
+        skills={edit.skills || []}
+        onChange={(skills) => setEdit((p) => ({ ...p, skills }))}
+      />
       <div className="stack-actions">
         <button className="btn btn-primary" onClick={onSave} style={{ padding: '10px 18px' }}>Save</button>
         <button className="btn btn-ghost"   onClick={onCancel} style={{ padding: '10px 18px' }}>Cancel</button>
@@ -367,9 +549,61 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
   );
 }
 
+function SkillsEditor({ skills, onChange }) {
+  const [draft, setDraft] = useState('');
+  function add() {
+    const v = draft.trim();
+    if (!v) return;
+    if (skills.length >= 12) return;
+    if (skills.some(s => s.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange([...skills, v.slice(0, 30)]);
+    setDraft('');
+  }
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase',
+                    letterSpacing: '.05em', marginBottom: 7 }}>
+        Skills &amp; expertise
+      </div>
+      {skills.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {skills.map((s) => (
+            <span key={s} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 999,
+              background: 'var(--blue-soft)', color: 'var(--blue)',
+              fontSize: 12, fontWeight: 600,
+            }}>
+              {s}
+              <button onClick={() => onChange(skills.filter(x => x !== s))} style={{
+                border: 'none', background: 'transparent', color: 'var(--blue)',
+                cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+              }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          className="input" value={draft}
+          placeholder="e.g. PyTorch, DSA, System Design"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          style={{ flex: 1, padding: '9px 12px', fontSize: 13.5 }}
+        />
+        <button className="btn btn-ghost" onClick={add} disabled={!draft.trim() || skills.length >= 12}
+                style={{ padding: '9px 16px' }}>Add</button>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>
+        Up to 12 tags. Shown on your profile and used in mentor search.
+      </div>
+    </div>
+  );
+}
+
 const POST_TAGS = ['Academic Help', 'Career', 'Resources', 'Events', 'General'];
 
-function PostRow({ post, isSelf, onDelete, onUpdate }) {
+function PostRow({ post, index = 0, isSelf, onDelete, onUpdate }) {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [editing,    setEditing]    = useState(false);
   const [editTag,    setEditTag]    = useState(post.tag);
@@ -414,7 +648,8 @@ function PostRow({ post, isSelf, onDelete, onUpdate }) {
   }
 
   return (
-    <div style={{ padding: '16px 0', borderTop: '1px solid var(--line)' }}>
+    <div className="fade-up" style={{ padding: '16px 0', borderTop: '1px solid var(--line)',
+                  animationDelay: `${Math.min(index * 60, 360)}ms` }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
           <span className={`tag tag-${tagTone(post.tag)}`}>{post.tag}</span>

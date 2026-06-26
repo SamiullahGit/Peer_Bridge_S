@@ -1,6 +1,18 @@
 const router = require('express').Router();
+const multer = require('multer');
 const auth   = require('../middleware/auth');
 const { supabase } = require('../config/supabase');
+const { makeStorage, fileUrl } = require('../config/storage');
+
+const upload = multer({
+  storage: makeStorage('messages', 'gmsg'),
+  limits : { fileSize: 15 * 1024 * 1024 },
+});
+function attachmentType(mime = '') {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'file';
+}
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O 1/I
 function generateCode(len = 8) {
@@ -220,13 +232,15 @@ router.get('/:id/messages', auth, async (req, res) => {
     if (!member) return res.status(403).json({ error: 'Join the group first' });
 
     const { data: msgs, error } = await supabase.from('group_messages')
-      .select('id, text, created_at, sender:sender_id(id,name,role,profile_image)')
+      .select('id, text, created_at, is_pinned, reply_to, attachment_url, attachment_type, attachment_name, sender:sender_id(id,name,role,profile_image)')
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true }).limit(100);
     if (error) throw error;
 
     res.json((msgs || []).map(m => ({
       id          : m.id, text: m.text, created_at: m.created_at,
+      is_pinned   : m.is_pinned || false, reply_to: m.reply_to,
+      attachment_url : m.attachment_url, attachment_type: m.attachment_type, attachment_name: m.attachment_name,
       sender_id   : m.sender?.id,  sender_name : m.sender?.name,
       sender_role : m.sender?.role, sender_image: m.sender?.profile_image,
     })));
@@ -237,28 +251,61 @@ router.get('/:id/messages', auth, async (req, res) => {
 });
 
 // ── POST /api/groups/:id/messages ─────────────────────────────────────
-router.post('/:id/messages', auth, async (req, res) => {
+router.post('/:id/messages', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text?.trim()) return res.status(400).json({ error: 'Message cannot be empty' });
+    const text = (req.body.text || '').trim();
+    const file = req.file;
+    if (!text && !file) return res.status(400).json({ error: 'Message cannot be empty' });
 
     const { data: member } = await supabase.from('group_members')
       .select('user_id').eq('group_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
     if (!member) return res.status(403).json({ error: 'Join the group first' });
 
+    const row = { group_id: req.params.id, sender_id: req.user.id, text: text || null,
+                  reply_to: req.body.reply_to || null };
+    if (file) {
+      row.attachment_url  = fileUrl(file);
+      row.attachment_type = attachmentType(file.mimetype);
+      row.attachment_name = file.originalname || 'attachment';
+    }
+
     const { data: msg, error } = await supabase.from('group_messages')
-      .insert({ group_id: req.params.id, sender_id: req.user.id, text: text.trim() })
+      .insert(row)
       .select().single();
     if (error) throw error;
 
     res.status(201).json({
       id: msg.id, text: msg.text, created_at: msg.created_at,
+      is_pinned: false, reply_to: msg.reply_to,
+      attachment_url: msg.attachment_url, attachment_type: msg.attachment_type, attachment_name: msg.attachment_name,
       sender_id: req.user.id, sender_name: req.user.name,
       sender_role: req.user.role, sender_image: null,
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// ── PATCH /api/groups/:id/messages/:msgId/pin  (admin: pin/unpin) ──────
+router.patch('/:id/messages/:msgId/pin', auth, async (req, res) => {
+  try {
+    const { data: me } = await supabase.from('group_members').select('role')
+      .eq('group_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+    if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Admins only' });
+
+    const pin = req.body.pinned !== false;
+    // Only one pinned announcement at a time — clear others when pinning.
+    if (pin) {
+      await supabase.from('group_messages').update({ is_pinned: false })
+        .eq('group_id', req.params.id).eq('is_pinned', true);
+    }
+    await supabase.from('group_messages').update({ is_pinned: pin })
+      .eq('id', req.params.msgId).eq('group_id', req.params.id);
+    res.json({ ok: true, is_pinned: pin });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to pin message' });
   }
 });
 

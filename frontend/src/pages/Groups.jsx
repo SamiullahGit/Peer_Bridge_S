@@ -1,18 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate }           from 'react-router-dom';
+import { useNavigate }                 from 'react-router-dom';
 
 import { pb }                from '../api/client.js';
 import { useAuth }           from '../context/AuthContext.jsx';
-import { useNotifications }  from '../context/NotificationContext.jsx';
 import { useTheme }          from '../context/ThemeContext.jsx';
 import { initialsOf, avatarColors } from '../utils/avatar.js';
-import { roleLabel }         from '../utils/role.js';
-import { timeAgo }           from '../utils/time.js';
+import { timeAgo }                 from '../utils/time.js';
 import { toast }             from '../components/Toast.jsx';
 import ToastHost             from '../components/Toast.jsx';
-import BridgeLogo            from '../components/BridgeLogo.jsx';
+import Sidebar               from '../components/Sidebar.jsx';
+import { Attachment, VoiceRecorder } from './Messages.jsx';
 
-import '../styles/feed.css';
+import '../styles/messages.css';
 
 /* ── Topic colours ─────────────────────────────────────────────────── */
 const TOPIC_COLORS = {
@@ -64,11 +63,10 @@ function CrownIcon({ size = 13 }) {
    Main page
    ═══════════════════════════════════════════════════════════════════════ */
 export default function Groups() {
-  const { user: me, logout }         = useAuth();
-  const { unreadMsgs }               = useNotifications();
-  const { theme }                    = useTheme();
-  const navigate                     = useNavigate();
-  const dark                         = theme === 'dark';
+  const { user: me }  = useAuth();
+  const { theme }     = useTheme();
+  const navigate      = useNavigate();
+  const dark          = theme === 'dark';
 
   /* Palette for groups-specific content (sidebar+topnav handled by feed.css) */
   const C = dark ? {
@@ -102,15 +100,17 @@ export default function Groups() {
   const [joinBarOpen,   setJoinBarOpen]   = useState(false);
   const [joinCode,      setJoinCode]      = useState('');
   const [joining,       setJoining]       = useState(false);
-  const [tab,           setTab]           = useState('all');
+  const [tab,           setTab]           = useState('mine');
 
   const [members,       setMembers]       = useState([]);
   const [membersLoading,setMembersLoading]= useState(false);
 
+  const [attach, setAttach] = useState(null);   // { file, kind }
+  const [replyTo, setReplyTo] = useState(null);  // group message being replied to
   const messagesEndRef = useRef(null);
   const pollRef        = useRef(null);
   const inputRef       = useRef(null);
-  const initials       = initialsOf(me?.name || 'You');
+  const groupFileRef   = useRef(null);
 
   /* ── Data ─────────────────────────────────────────────────────────── */
   useEffect(() => { loadGroups(); }, []);
@@ -190,13 +190,33 @@ export default function Groups() {
   async function sendMessage(e) {
     e?.preventDefault();
     const text = draft.trim();
-    if (!text || !activeGroup) return;
+    if ((!text && !attach) || !activeGroup) return;
     setSending(true); setDraft('');
+    const sending = attach; const replyId = replyTo?.id || null;
+    setAttach(null); setReplyTo(null);
     try {
-      const msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text });
+      let msg;
+      if (sending) {
+        const fd = new FormData();
+        if (text) fd.append('text', text);
+        if (replyId) fd.append('reply_to', replyId);
+        fd.append('attachment', sending.file, sending.file.name);
+        msg = await pb.upload(`/groups/${activeGroup.id}/messages`, fd);
+      } else {
+        msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text, reply_to: replyId });
+      }
       setMessages(prev => [...prev, msg]);
-    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); }
+    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); setAttach(sending); if (replyId) setReplyTo(replyTo); }
     finally { setSending(false); inputRef.current?.focus(); }
+  }
+
+  function onPickGroupFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { toast('File must be under 15 MB'); return; }
+    const kind = f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audio' : 'file';
+    setAttach({ file: f, kind });
+    e.target.value = '';
   }
 
   async function kickMember(userId) {
@@ -208,6 +228,14 @@ export default function Groups() {
         ? { ...g, member_count: Math.max(0, g.member_count - 1) } : g));
       toast('Member removed.');
     } catch (err) { toast(err.message || 'Failed'); }
+  }
+
+  async function pinMessage(msg, pinned) {
+    // Optimistic: clear other pins, set this one.
+    setMessages(prev => prev.map(m =>
+      m.id === msg.id ? { ...m, is_pinned: pinned } : { ...m, is_pinned: pinned ? false : m.is_pinned }));
+    try { await pb.patch(`/groups/${activeGroup.id}/messages/${msg.id}/pin`, { pinned }); }
+    catch (err) { toast(err.message || 'Failed to pin'); loadMessages(activeGroup.id, true); }
   }
 
   async function changeRole(userId, newRole) {
@@ -232,55 +260,19 @@ export default function Groups() {
     navigator.clipboard?.writeText(code).then(() => toast('Invite code copied!'));
   }
 
-  const displayedGroups = tab === 'mine' ? groups.filter(g => g.is_member) : groups;
+  const displayedGroups = groups.filter(g => g.is_member);
   const amAdmin         = activeGroup?.my_role === 'admin';
 
-  /* ════════════════════════════════════════════════════════════════════
-     RENDER — uses same feed-app grid as Feed page → sidebar appears
-     ════════════════════════════════════════════════════════════════════ */
   return (
-    <div className="feed">
+    <Sidebar active="groups" extraClass="groups-page">
       <ToastHost />
 
-      {/* panel-hidden removes right rail → 220px sidebar + 1fr content */}
-      <div className="feed-app panel-hidden">
-
-        {/* ── Topnav — NO theme toggle (Feed page only) ────────── */}
-        <header className="feed-topnav">
-          <Link to="/feed" className="feed-topnav-logo">
-            <BridgeLogo width={38} height={26} variant="nav" />
-            <span>Peer Bridge</span>
-          </Link>
-          <div style={{ flex: 1, padding: '0 20px' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,.7)' }}>
-              Study Groups
-            </span>
-          </div>
-          <div className="topnav-right">
-            <div className="user-chip" onClick={() => navigate('/profile')}>
-              {me?.profile_image
-                ? <img src={me.profile_image} alt={me.name}
-                       style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} />
-                : <div style={{
-                    width: 30, height: 30, borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, fontWeight: 700, color: 'white',
-                  }}>{initials}</div>}
-              <div className="user-chip-name">{me?.name || 'You'}</div>
-            </div>
-          </div>
-        </header>
-
-        {/* ── Sidebar ─────────────────────────────────────────────── */}
-        <GroupsNav me={me} initials={initials} unreadMsgs={unreadMsgs} onLogout={logout} />
-
-        {/* ── Groups content (left list + chat + optional info panel) ── */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: infoOpen && activeGroup ? '280px 1fr 296px' : '280px 1fr',
-          overflow: 'hidden',
-        }}>
+      {/* ── Groups content (left list + chat + optional info panel) ── */}
+      <div style={{
+        flex: 1, minHeight: 0, overflow: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: infoOpen && activeGroup ? '280px 1fr 296px' : '280px 1fr',
+      }}>
 
           {/* ══ LEFT: Group list panel ══════════════════════════════ */}
           <div style={{
@@ -347,27 +339,11 @@ export default function Groups() {
                 </div>
               )}
 
-              {/* Tabs */}
+              {/* My groups label */}
               <div style={{
-                display: 'flex', gap: 3,
-                background: dark ? '#0e1117' : '#eef0f5',
-                borderRadius: 8, padding: 3,
-              }}>
-                {['all', 'mine'].map(t => (
-                  <button key={t} onClick={() => setTab(t)} style={{
-                    flex: 1, padding: '5px', borderRadius: 6, border: 'none',
-                    fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-                    background: tab === t ? C.card : 'transparent',
-                    color: tab === t ? C.ink : C.ink3,
-                    boxShadow: tab === t
-                      ? (dark ? '0 1px 4px rgba(0,0,0,.45)' : '0 1px 4px rgba(0,0,0,.08)')
-                      : 'none',
-                    transition: 'all .15s',
-                  }}>
-                    {t === 'all' ? 'All groups' : 'My groups'}
-                  </button>
-                ))}
-              </div>
+                fontSize: 10.5, fontWeight: 700, color: C.ink3,
+                textTransform: 'uppercase', letterSpacing: '.06em', padding: '3px 2px',
+              }}>My groups</div>
             </div>
 
             {/* List */}
@@ -385,7 +361,7 @@ export default function Groups() {
                 : displayedGroups.length === 0
                 ? (
                   <div style={{ padding: 26, textAlign: 'center', color: C.ink3, fontSize: 13 }}>
-                    {tab === 'mine' ? "You haven't joined any groups yet." : 'No groups yet. Create one!'}
+                    Join a group via invite code or create your own.
                   </div>
                 )
                 : displayedGroups.map(g => {
@@ -547,6 +523,35 @@ export default function Groups() {
                   </button>
                 </div>
 
+                {/* Pinned announcement banner */}
+                {(() => {
+                  const pinned = messages.find(m => m.is_pinned);
+                  if (!pinned) return null;
+                  return (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '9px 15px', background: dark ? '#1a1608' : '#fffbeb',
+                      borderBottom: `1px solid ${C.line}`, flexShrink: 0,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+                      </svg>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '.05em' }}>Pinned announcement</div>
+                        <div style={{ fontSize: 12.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontWeight: 600 }}>{pinned.sender_name}: </span>{pinned.text}
+                        </div>
+                      </div>
+                      {amAdmin && (
+                        <button onClick={() => pinMessage(pinned, false)} title="Unpin" style={{
+                          border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer',
+                          fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
+                        }}>×</button>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Messages */}
                 <div style={{
                   flex: 1, overflowY: 'auto', padding: '13px 15px',
@@ -581,19 +586,61 @@ export default function Groups() {
                                 {msg.sender_name}
                               </div>
                             )}
-                            <div style={{
-                              padding: '7px 11px',
+                            <div className="gmsg-bubble" style={{
+                              padding: msg.attachment_type === 'image' ? 6 : '7px 11px',
                               borderRadius: isMe ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
                               background: isMe ? C.blue : C.bubble,
                               color: isMe ? 'white' : C.ink,
                               fontSize: 13.5, lineHeight: 1.5,
                               border: isMe ? 'none' : `1px solid ${C.bubbleBorder}`,
-                              wordBreak: 'break-word',
-                            }}>{msg.text}</div>
+                              wordBreak: 'break-word', position: 'relative',
+                            }}>
+                              {msg.reply_to && (() => {
+                                const parent = messages.find(x => x.id === msg.reply_to);
+                                if (!parent) return null;
+                                const label = parent.text || (parent.attachment_type === 'image' ? '📷 Photo'
+                                  : parent.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment');
+                                return (
+                                  <div style={{
+                                    borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,.6)' : C.blue}`,
+                                    background: isMe ? 'rgba(255,255,255,.14)' : (dark ? '#0e1117' : '#eef1f6'),
+                                    borderRadius: 6, padding: '4px 8px', marginBottom: 5, fontSize: 12,
+                                  }}>
+                                    <div style={{ fontWeight: 700, fontSize: 10.5, opacity: .85 }}>{parent.sender_name}</div>
+                                    <div style={{ opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                                  </div>
+                                );
+                              })()}
+                              {msg.attachment_url && <Attachment m={msg} />}
+                              {msg.text}
+                              <button className="gmsg-reply-btn" title="Reply" onClick={() => setReplyTo(msg)} style={{
+                                position: 'absolute', top: -10, [isMe ? 'left' : 'right']: -8,
+                                width: 24, height: 24, borderRadius: '50%', cursor: 'pointer',
+                                border: `1px solid ${C.line}`, background: C.card, color: C.ink3,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                                </svg>
+                              </button>
+                            </div>
                             <div style={{
                               fontSize: 9.5, color: C.ink3, marginTop: 2,
                               textAlign: isMe ? 'right' : 'left', paddingInline: 3,
-                            }}>{timeAgo(msg.created_at)}</div>
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              justifyContent: isMe ? 'flex-end' : 'flex-start',
+                            }}>
+                              {msg.is_pinned && (
+                                <span style={{ color: '#d97706', fontWeight: 700 }}>📌 Pinned</span>
+                              )}
+                              {timeAgo(msg.created_at)}
+                              {amAdmin && !msg.is_pinned && (
+                                <button onClick={() => pinMessage(msg, true)} title="Pin as announcement" style={{
+                                  border: 'none', background: 'transparent', color: C.ink3,
+                                  cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 600,
+                                }}>Pin</button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -608,7 +655,51 @@ export default function Groups() {
                   borderTop: `1px solid ${C.line}`,
                   background: C.card, flexShrink: 0,
                 }}>
-                  <form onSubmit={sendMessage} style={{ display: 'flex', gap: 7 }}>
+                  {replyTo && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7,
+                      padding: '7px 11px', borderRadius: 8,
+                      background: dark ? '#0e1117' : '#eef1f6', borderLeft: `3px solid ${C.blue}`, fontSize: 12.5,
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.blue }}>Replying to {replyTo.sender_name}</div>
+                        <div style={{ color: C.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {replyTo.text || (replyTo.attachment_type === 'image' ? '📷 Photo'
+                            : replyTo.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment')}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setReplyTo(null)} style={{
+                        border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer', fontSize: 16,
+                      }}>×</button>
+                    </div>
+                  )}
+                  {attach && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7,
+                      padding: '7px 11px', borderRadius: 9,
+                      background: C.blueSoft, border: `1px solid ${C.blue}33`, fontSize: 12.5,
+                    }}>
+                      <span style={{ fontSize: 15 }}>{attach.kind === 'image' ? '🖼️' : attach.kind === 'audio' ? '🎙️' : '📎'}</span>
+                      <span style={{ flex: 1, minWidth: 0, color: C.ink, fontWeight: 600,
+                                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attach.file.name}</span>
+                      <button type="button" onClick={() => setAttach(null)} style={{
+                        border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer', fontSize: 16,
+                      }}>×</button>
+                    </div>
+                  )}
+                  <form onSubmit={sendMessage} style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                    <input ref={groupFileRef} type="file" style={{ display: 'none' }}
+                           accept="image/*,audio/*,.pdf,.doc,.docx,.zip,.txt" onChange={onPickGroupFile} />
+                    <button type="button" onClick={() => groupFileRef.current?.click()} title="Attach a file" style={{
+                      width: 36, height: 36, borderRadius: 9, flexShrink: 0, cursor: 'pointer',
+                      border: `1.5px solid ${C.line}`, background: 'transparent', color: C.ink3,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
+                    <VoiceRecorder onRecorded={(file) => setAttach({ file, kind: 'audio' })} />
                     <input
                       ref={inputRef}
                       value={draft}
@@ -622,12 +713,12 @@ export default function Groups() {
                         fontFamily: 'inherit', fontSize: 13.5, outline: 'none',
                       }}
                     />
-                    <button type="submit" disabled={!draft.trim() || sending} style={{
+                    <button type="submit" disabled={(!draft.trim() && !attach) || sending} style={{
                       padding: '9px 15px', borderRadius: 9, border: 'none', flexShrink: 0,
-                      background: draft.trim() ? C.blue : C.line,
-                      color: draft.trim() ? 'white' : C.ink3,
+                      background: (draft.trim() || attach) ? C.blue : C.line,
+                      color: (draft.trim() || attach) ? 'white' : C.ink3,
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                      cursor: draft.trim() ? 'pointer' : 'default',
+                      cursor: (draft.trim() || attach) ? 'pointer' : 'default',
                       transition: 'background .15s',
                     }}>{sending ? '…' : 'Send'}</button>
                   </form>
@@ -809,7 +900,6 @@ export default function Groups() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Create group modal */}
       {createOpen && (
@@ -824,97 +914,7 @@ export default function Groups() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-/* ── Sidebar — identical nav to Feed, Study Groups active ─────────── */
-function GroupsNav({ me, initials, unreadMsgs, onLogout }) {
-  return (
-    <nav className="snav">
-      <div className="snav-section">Main</div>
-
-      <Link to="/feed"      className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 12 12 4l9 8"/><path d="M5 10v10h14V10"/>
-        </svg>
-        <span>Home</span>
-      </Link>
-      <Link to="/mentors"   className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Mentors</span>
-      </Link>
-      <Link to="/resources" className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"/>
-        </svg>
-        <span>Resources</span>
-      </Link>
-      <Link to="/events"    className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>
-        </svg>
-        <span>Events</span>
-      </Link>
-      <Link to="/messages"  className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z"/>
-        </svg>
-        <span>Messages</span>
-        {unreadMsgs > 0 && (
-          <span style={{
-            marginLeft: 'auto', background: '#EF4444', color: 'white',
-            fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
-          }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>
-        )}
-      </Link>
-      <Link to="/groups" className="snav-item active">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Study Groups</span>
-      </Link>
-      <Link to="/saved"     className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 3h12v18l-6-4-6 4V3Z"/>
-        </svg>
-        <span>Saved</span>
-      </Link>
-
-      <div className="snav-section" style={{ marginTop: 8 }}>Account</div>
-      <Link to="/profile" className="snav-item">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/>
-          <path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66"/>
-        </svg>
-        <span>My Profile</span>
-      </Link>
-
-      <div className="snav-footer">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: '50%',
-            background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 800, color: 'white', flexShrink: 0,
-          }}>{initials}</div>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{me?.name || 'You'}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.55)' }}>{roleLabel(me?.role || 'student')}</div>
-          </div>
-        </div>
-        <button onClick={onLogout} style={{
-          width: '100%', padding: 8,
-          border: '1.5px solid rgba(255,255,255,.2)', borderRadius: 8,
-          background: 'rgba(255,255,255,.08)', fontFamily: 'inherit',
-          fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,.75)', cursor: 'pointer',
-        }}>Sign out</button>
-      </div>
-    </nav>
+    </Sidebar>
   );
 }
 
