@@ -175,16 +175,6 @@ export default function PostCard({
         </div>
 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-          <button className={`act-btn${post.bookmarked ? ' saved' : ''}`}
-                  onClick={() => onBookmark(post.id)}>
-            <svg width="13" height="13" viewBox="0 0 24 24"
-                 fill={post.bookmarked ? 'currentColor' : 'none'}
-                 stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M6 3h12v18l-6-4-6 4V3Z" />
-            </svg>
-            {post.bookmarked ? 'Saved' : 'Save'}
-          </button>
-
           <div style={{ position: 'relative' }} ref={menuRef}>
             <button
               className="act-btn"
@@ -202,9 +192,20 @@ export default function PostCard({
               <div style={{
                 position: 'absolute', right: 0, top: 36,
                 background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 10,
-                minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+                minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
                 zIndex: 50, overflow: 'hidden',
               }}>
+                <button
+                  onClick={() => { setMenuOpen(false); onBookmark(post.id); }}
+                  style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: post.bookmarked ? 'var(--blue)' : 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--line)' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24"
+                       fill={post.bookmarked ? 'currentColor' : 'none'}
+                       stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M6 3h12v18l-6-4-6 4V3Z" />
+                  </svg>
+                  {post.bookmarked ? 'Unsave post' : 'Save post'}
+                </button>
                 {isOwn ? (
                   <>
                     <button
