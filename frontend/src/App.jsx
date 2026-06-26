@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import RequireAuth   from './components/RequireAuth.jsx';
 import XpToastHost   from './components/XpToastHost.jsx';
 import MsgPopupHost  from './components/MsgPopup.jsx';
+import BabaAssistant from './components/BabaAssistant.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 
@@ -22,6 +23,7 @@ export default function App() {
       <NotificationProvider>
         <XpToastHost />
         <MsgPopupHost />
+        <BabaAssistant />
         <Routes>
           <Route path="/"          element={<Landing />} />
           <Route path="/index.html" element={<Navigate to="/" replace />} />

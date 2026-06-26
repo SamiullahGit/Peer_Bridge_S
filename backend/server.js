@@ -51,6 +51,7 @@ app.use('/api/groups',       require('./routes/groups'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/search',       require('./routes/search'));
 app.use('/api/collections',  require('./routes/collections'));
+app.use('/api/ai',           require('./routes/ai'));
 
 // Health-check endpoint (handy when wiring up the React dev proxy).
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -68,7 +69,8 @@ async function start() {
   await ensureBucket();
   app.listen(PORT, () => {
     console.log(`\n  Peer Bridge backend running at http://localhost:${PORT}`);
-    console.log(`  NODE_ENV = ${process.env.NODE_ENV || 'development'}\n`);
+    console.log(`  NODE_ENV = ${process.env.NODE_ENV || 'development'}`);
+    console.log(`  Ask Baba (OpenRouter): ${process.env.OPENROUTER_API_KEY ? 'enabled' : 'NOT configured'}\n`);
   });
 }
 
