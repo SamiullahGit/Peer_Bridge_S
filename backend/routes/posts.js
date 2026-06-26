@@ -251,12 +251,12 @@ router.get('/:id/replies', auth, async (req, res) => {
 
 router.post('/:id/replies', auth, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, parent_id } = req.body;
     if (!text) return res.status(400).json({ error: 'Reply text is required' });
 
     const { data: reply, error } = await supabase
       .from('replies')
-      .insert({ post_id: req.params.id, author_id: req.user.id, text })
+      .insert({ post_id: req.params.id, author_id: req.user.id, text, parent_id: parent_id || null })
       .select('*, author:author_id(name,role)')
       .single();
     if (error) throw error;

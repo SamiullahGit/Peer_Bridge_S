@@ -1,9 +1,25 @@
 const router = require('express').Router();
+const multer = require('multer');
 
 const auth          = require('../middleware/auth');
 const { supabase }  = require('../config/supabase');
 const xpManager     = require('../services/xpManager');
 const { shapeMessage } = require('../data/shapers');
+const { makeStorage, fileUrl } = require('../config/storage');
+
+// Optional attachment on a message: image, common doc types, or an audio
+// voice note. 15 MB cap.
+const upload = multer({
+  storage: makeStorage('messages', 'msg'),
+  limits : { fileSize: 15 * 1024 * 1024 },
+});
+
+// Classify an attachment for the client renderer.
+function attachmentType(mime = '') {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  return 'file';
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // GET /api/messages    - inbox (most recent message per contact)
@@ -52,14 +68,25 @@ router.get('/:userId', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 // POST /api/messages/:userId   { text }
 // ─────────────────────────────────────────────────────────────────────
-router.post('/:userId', auth, async (req, res) => {
+router.post('/:userId', auth, upload.single('attachment'), async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ error: 'Message text is required' });
+    const text = (req.body.text || '').trim();
+    const file = req.file;
+    if (!text && !file) return res.status(400).json({ error: 'Message text or attachment is required' });
+
+    const row = {
+      sender_id: req.user.id, receiver_id: req.params.userId,
+      text: text || null,
+    };
+    if (file) {
+      row.attachment_url  = fileUrl(file);
+      row.attachment_type = attachmentType(file.mimetype);
+      row.attachment_name = file.originalname || 'attachment';
+    }
 
     const { data: msg, error } = await supabase
       .from('messages')
-      .insert({ sender_id: req.user.id, receiver_id: req.params.userId, text })
+      .insert(row)
       .select('*, sender:sender_id(name)')
       .single();
     if (error) throw error;
