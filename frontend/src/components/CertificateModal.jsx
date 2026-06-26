@@ -100,7 +100,7 @@ export default function CertificateModal({ stats, onClose, onGenerated }) {
               Share on LinkedIn
             </button>
           </div>
-          <p style={{ fontSize: 12, color: '#6b7280', marginTop: 10, textAlign: 'center' }}>{status}</p>
+          <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 10, textAlign: 'center' }}>{status}</p>
         </div>
       </div>
     </div>

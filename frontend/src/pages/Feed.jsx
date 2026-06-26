@@ -504,10 +504,10 @@ export default function Feed() {
                   <path d="M7 3H24v22H7A3 3 0 014 22V6a3 3 0 013-3z" />
                 </svg>
               </div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: '#0D1B2A', marginBottom: 8 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)', marginBottom: 8 }}>
                 Your feed is quiet right now
               </div>
-              <p style={{ fontSize: 14, color: '#4B5C73', maxWidth: 280, lineHeight: 1.65 }}>
+              <p style={{ fontSize: 14, color: 'var(--ink-2)', maxWidth: 280, lineHeight: 1.65 }}>
                 Be the first to ask a question or share something useful with your NUST community.
               </p>
               <button onClick={() => openComposer()} style={{
@@ -822,7 +822,7 @@ function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
           <div className="notif-dropdown-head">
             <span className="notif-dropdown-title">Notifications</span>
             {totalUnread > 0 && (
-              <span style={{ fontSize: 11, color: '#8899B0' }}>{totalUnread} unread</span>
+              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{totalUnread} unread</span>
             )}
           </div>
 
@@ -858,7 +858,7 @@ function NotificationBell({ convos, unreadMsgs, onNavigate, onMarkRead }) {
                       <div className="notif-row-preview" style={{ whiteSpace: 'normal' }}>
                         <strong style={{ color: 'var(--ink)' }}>{n.actor_name || 'Someone'}</strong> {n.text}
                       </div>
-                      <div style={{ fontSize: 11, color: '#8899B0', marginTop: 2 }}>{timeAgo(n.created_at)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>{timeAgo(n.created_at)}</div>
                     </div>
                   </div>
                 );
