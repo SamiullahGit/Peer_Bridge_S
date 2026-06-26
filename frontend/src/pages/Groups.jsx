@@ -102,7 +102,7 @@ export default function Groups() {
   const [joinBarOpen,   setJoinBarOpen]   = useState(false);
   const [joinCode,      setJoinCode]      = useState('');
   const [joining,       setJoining]       = useState(false);
-  const [tab,           setTab]           = useState('all');
+  const [tab,           setTab]           = useState('mine');
 
   const [members,       setMembers]       = useState([]);
   const [membersLoading,setMembersLoading]= useState(false);
@@ -232,7 +232,7 @@ export default function Groups() {
     navigator.clipboard?.writeText(code).then(() => toast('Invite code copied!'));
   }
 
-  const displayedGroups = tab === 'mine' ? groups.filter(g => g.is_member) : groups;
+  const displayedGroups = groups.filter(g => g.is_member);
   const amAdmin         = activeGroup?.my_role === 'admin';
 
   /* ════════════════════════════════════════════════════════════════════
@@ -347,27 +347,11 @@ export default function Groups() {
                 </div>
               )}
 
-              {/* Tabs */}
+              {/* My groups label */}
               <div style={{
-                display: 'flex', gap: 3,
-                background: dark ? '#0e1117' : '#eef0f5',
-                borderRadius: 8, padding: 3,
-              }}>
-                {['all', 'mine'].map(t => (
-                  <button key={t} onClick={() => setTab(t)} style={{
-                    flex: 1, padding: '5px', borderRadius: 6, border: 'none',
-                    fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-                    background: tab === t ? C.card : 'transparent',
-                    color: tab === t ? C.ink : C.ink3,
-                    boxShadow: tab === t
-                      ? (dark ? '0 1px 4px rgba(0,0,0,.45)' : '0 1px 4px rgba(0,0,0,.08)')
-                      : 'none',
-                    transition: 'all .15s',
-                  }}>
-                    {t === 'all' ? 'All groups' : 'My groups'}
-                  </button>
-                ))}
-              </div>
+                fontSize: 10.5, fontWeight: 700, color: C.ink3,
+                textTransform: 'uppercase', letterSpacing: '.06em', padding: '3px 2px',
+              }}>My groups</div>
             </div>
 
             {/* List */}
@@ -385,7 +369,7 @@ export default function Groups() {
                 : displayedGroups.length === 0
                 ? (
                   <div style={{ padding: 26, textAlign: 'center', color: C.ink3, fontSize: 13 }}>
-                    {tab === 'mine' ? "You haven't joined any groups yet." : 'No groups yet. Create one!'}
+                    Join a group via invite code or create your own.
                   </div>
                 )
                 : displayedGroups.map(g => {
@@ -859,6 +843,13 @@ function GroupsNav({ me, initials, unreadMsgs, onLogout }) {
         </svg>
         <span>Events</span>
       </Link>
+      <Link to="/groups" className="snav-item active">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>Study Groups</span>
+      </Link>
       <Link to="/messages"  className="snav-item">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z"/>
@@ -870,13 +861,6 @@ function GroupsNav({ me, initials, unreadMsgs, onLogout }) {
             fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 999,
           }}>{unreadMsgs > 99 ? '99+' : unreadMsgs}</span>
         )}
-      </Link>
-      <Link to="/groups" className="snav-item active">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>Study Groups</span>
       </Link>
       <Link to="/saved"     className="snav-item">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">

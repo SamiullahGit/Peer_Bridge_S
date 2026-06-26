@@ -214,7 +214,7 @@ function Bubble({ name = '?', size = 38, online = false }) {
         <span style={{
           position: 'absolute', bottom: 0, right: 0,
           width: Math.round(size * 0.28), height: Math.round(size * 0.28),
-          borderRadius: '50%', background: '#22c55e', border: '2px solid #fff',
+          borderRadius: '50%', background: '#22c55e', border: '2px solid var(--card)',
         }} />
       )}
     </div>

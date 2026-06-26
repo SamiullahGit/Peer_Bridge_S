@@ -179,16 +179,23 @@
 }
 
 /* ── Dark mode overrides ─────────────────────────────────────────── */
-[data-theme="dark"] .convo-list   { background: var(--card); }
-[data-theme="dark"] .convo-header { background: var(--card); }
-[data-theme="dark"] .convo-search { background: var(--bg-2); }
+[data-theme="dark"] .convo-panel       { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .convo-panel-head  { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .convo-search      { background: var(--bg-2); border-color: var(--line); }
 [data-theme="dark"] .convo-search:focus-within { background: var(--bg-2); }
-[data-theme="dark"] .chat-pane    { background: var(--bg); }
-[data-theme="dark"] .chat-header  { background: var(--card); }
-[data-theme="dark"] .bubble-them  { background: var(--card); border-color: var(--line); }
-[data-theme="dark"] .chat-input-bar { background: var(--card); }
+[data-theme="dark"] .convo-item        { border-color: var(--line); }
+[data-theme="dark"] .convo-item:hover  { background: var(--bg-2); }
+[data-theme="dark"] .convo-item.active { background: var(--blue-soft); border-left-color: var(--blue); }
+[data-theme="dark"] .chat-pane         { background: var(--bg); }
+[data-theme="dark"] .chat-header       { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .bubble-them       { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .chat-input-bar    { background: var(--card); border-color: var(--line); }
+[data-theme="dark"] .chat-input-field  { background: var(--bg-2); color: var(--ink); border-color: var(--line); }
 [data-theme="dark"] .chat-input-field:focus { background: var(--bg-2); }
-[data-theme="dark"] .chat-back-btn { background: var(--card); }
-[data-theme="dark"] .chat-empty   { background: linear-gradient(145deg, var(--bg) 0%, var(--bg-2) 50%, var(--bg-3) 100%); }
-[data-theme="dark"] .chat-empty-card { background: rgba(26,30,40,.9); border-color: var(--line); }
+[data-theme="dark"] .chat-back-btn     { background: var(--card); border-color: var(--line); color: var(--ink-2); }
+[data-theme="dark"] .chat-date-divider { color: var(--ink-3); }
+[data-theme="dark"] .chat-date-divider::before,
+[data-theme="dark"] .chat-date-divider::after { background: var(--line); }
+[data-theme="dark"] .chat-empty        { background: linear-gradient(145deg, var(--bg) 0%, var(--bg-2) 50%, var(--bg-3,var(--bg-2)) 100%); }
+[data-theme="dark"] .chat-empty-card   { background: rgba(26,30,40,.9); border-color: var(--line); }
 [data-theme="dark"] .chat-empty-icon-wrap { background: var(--blue-soft); border-color: var(--blue-mid); }

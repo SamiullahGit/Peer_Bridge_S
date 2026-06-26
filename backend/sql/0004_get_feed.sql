@@ -30,6 +30,7 @@ returns table (
   comments_count  integer,
   bookmarks_count integer,
   is_hidden       boolean,
+  is_anonymous    boolean,
   created_at      timestamptz,
   updated_at      timestamptz,
   author_name     text,
@@ -43,6 +44,7 @@ language sql stable security definer set search_path = public, pg_temp as $$
   select
     p.id, p.author_id, p.tag, p.title, p.body, p.image_path,
     p.likes_count, p.comments_count, p.bookmarks_count, p.is_hidden,
+    p.is_anonymous,
     p.created_at, p.updated_at,
     u.name, u.role, u.department, u.graduation_year,
     exists(select 1 from post_likes     pl where pl.post_id = p.id and pl.user_id = viewer) as liked,
