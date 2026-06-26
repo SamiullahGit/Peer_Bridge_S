@@ -1,11 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 
 import Avatar              from './Avatar.jsx';
+import { pb }              from '../api/client.js';
 import { roleLabel }       from '../utils/role.js';
 import { timeAgo }         from '../utils/time.js';
 import { tagPalette, linkifyHTML } from '../utils/format.js';
 
 const TAGS = ['Academic Help', 'Career', 'Resources', 'Events', 'General'];
+
+// Reaction palette — keys must match backend REACTIONS array.
+const REACTIONS = [
+  { key: 'like',       emoji: '👍', label: 'Like' },
+  { key: 'helpful',    emoji: '🔥', label: 'Helpful' },
+  { key: 'love',       emoji: '❤️', label: 'Love' },
+  { key: 'insightful', emoji: '💡', label: 'Insightful' },
+  { key: 'celebrate',  emoji: '🎉', label: 'Celebrate' },
+];
+const reactionEmoji = (k) => (REACTIONS.find(r => r.key === k) || {}).emoji || '👍';
 
 function TagPill({ tag }) {
   const [bg, fg] = tagPalette(tag);
@@ -39,6 +50,45 @@ export default function PostCard({
   const [editBody,  setEditBody]  = useState(post.body || '');
   const [saving,   setSaving]     = useState(false);
   const menuRef = useRef(null);
+
+  // Reactions (local optimistic state, seeded from the feed payload).
+  const [myReaction, setMyReaction]   = useState(post.my_reaction || null);
+  const [reactCount, setReactCount]   = useState(post.reactions_count || 0);
+  const [reactOpen,  setReactOpen]    = useState(false);
+  const reactRef = useRef(null);
+
+  // Reply likes (replyId -> liked bool, seeded false; counts tracked too).
+  const [replyLikes, setReplyLikes]   = useState({});
+
+  async function react(key) {
+    setReactOpen(false);
+    const prev = myReaction;
+    // Optimistic: toggle off if same, else set/switch.
+    if (prev === key) { setMyReaction(null); setReactCount(c => Math.max(0, c - 1)); }
+    else { setMyReaction(key); if (!prev) setReactCount(c => c + 1); }
+    try {
+      const r = await pb.post(`/posts/${post.id}/react`, { emoji: key });
+      setMyReaction(r.my_reaction);
+    } catch {
+      setMyReaction(prev);   // revert
+    }
+  }
+
+  async function likeReply(r) {
+    const cur = replyLikes[r.id];
+    const liked = cur ? cur.liked : false;
+    const base  = cur ? cur.count : (r.likes_count || 0);
+    setReplyLikes(prev => ({ ...prev, [r.id]: { liked: !liked, count: base + (liked ? -1 : 1) } }));
+    try { await pb.post(`/posts/replies/${r.id}/like`, {}); }
+    catch { setReplyLikes(prev => ({ ...prev, [r.id]: { liked, count: base } })); }
+  }
+
+  useEffect(() => {
+    if (!reactOpen) return;
+    function onDown(e) { if (reactRef.current && !reactRef.current.contains(e.target)) setReactOpen(false); }
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [reactOpen]);
 
   const isAnon   = post.is_anonymous && post.author_id !== me?.id;
   const isMentor = !isAnon && post.author_role === 'mentor';
@@ -228,18 +278,52 @@ export default function PostCard({
         </div>
       )}
 
+      {post.has_poll && <PollBlock postId={post.id} />}
+
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
         marginTop: 14, paddingTop: 14, borderTop: '1.5px solid var(--line)', flexWrap: 'wrap',
       }}>
-        <button className={`act-btn${post.liked ? ' liked' : ''}`} onClick={() => onLike(post.id)}>
-          <svg width="13" height="13" viewBox="0 0 24 24"
-               fill={post.liked ? 'currentColor' : 'none'}
-               stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10Z" />
-          </svg>
-          {post.likes_count}
-        </button>
+        <div style={{ position: 'relative' }} ref={reactRef}>
+          <button
+            className={`act-btn${myReaction ? ' liked' : ''}`}
+            onClick={() => myReaction ? react(myReaction) : setReactOpen(o => !o)}
+            onMouseEnter={() => setReactOpen(true)}
+            title="React"
+          >
+            {myReaction ? (
+              <span style={{ fontSize: 15, lineHeight: 1 }}>{reactionEmoji(myReaction)}</span>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10Z" />
+              </svg>
+            )}
+            {reactCount > 0 ? reactCount : 'React'}
+          </button>
+          {reactOpen && (
+            <div
+              onMouseLeave={() => setReactOpen(false)}
+              style={{
+                position: 'absolute', bottom: 'calc(100% + 6px)', left: 0, zIndex: 60,
+                display: 'flex', gap: 2, padding: '6px 8px',
+                background: 'var(--card)', border: '1.5px solid var(--line)',
+                borderRadius: 999, boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+              }}>
+              {REACTIONS.map(r => (
+                <button key={r.key} title={r.label} onClick={() => react(r.key)}
+                  style={{
+                    border: 'none', background: myReaction === r.key ? 'var(--blue-soft)' : 'transparent',
+                    cursor: 'pointer', fontSize: 19, lineHeight: 1, padding: '4px 5px', borderRadius: 999,
+                    transition: 'transform .12s',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.25)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >{r.emoji}</button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <button className="act-btn" onClick={() => onToggleReplies(post.id)}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
@@ -287,6 +371,21 @@ export default function PostCard({
                   )}
                 </div>
                 <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
+                <button
+                  onClick={() => likeReply(r)}
+                  style={{
+                    marginTop: 5, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    border: 'none', background: 'transparent', cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+                    color: (replyLikes[r.id]?.liked) ? '#DC2626' : 'var(--ink-3)', padding: 0,
+                  }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24"
+                       fill={(replyLikes[r.id]?.liked) ? 'currentColor' : 'none'}
+                       stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 20s-7-4.5-7-10a4 4 0 017-2.6A4 4 0 0119 10c0 5.5-7 10-7 10Z" />
+                  </svg>
+                  {(replyLikes[r.id]?.count ?? r.likes_count ?? 0) || ''} Like
+                </button>
               </div>
             </div>
           ))}
@@ -309,6 +408,85 @@ export default function PostCard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Poll block — lazy-loads poll data, lets the viewer vote once ─────── */
+function PollBlock({ postId }) {
+  const [poll, setPoll]   = useState(null);
+  const [busy, setBusy]   = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    pb.get(`/posts/${postId}/poll`).then(p => { if (alive) setPoll(p); }).catch(() => {});
+    return () => { alive = false; };
+  }, [postId]);
+
+  if (!poll) return null;
+  const voted = poll.my_vote !== null && poll.my_vote !== undefined;
+  const total = poll.total || 0;
+
+  async function vote(i) {
+    if (busy) return;
+    setBusy(true);
+    // Optimistic update.
+    setPoll(prev => {
+      const counts = prev.counts.slice();
+      if (prev.my_vote !== null && prev.my_vote !== undefined) counts[prev.my_vote] = Math.max(0, counts[prev.my_vote] - 1);
+      counts[i] += 1;
+      const newTotal = (prev.my_vote === null || prev.my_vote === undefined) ? prev.total + 1 : prev.total;
+      return { ...prev, counts, total: newTotal, my_vote: i };
+    });
+    try { await pb.post(`/posts/${postId}/poll/vote`, { option_index: i }); }
+    catch { /* keep optimistic */ }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div style={{
+      marginTop: 14, padding: 14, borderRadius: 12,
+      border: '1.5px solid var(--line)', background: 'var(--bg)',
+    }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--ink)', marginBottom: 10,
+                    display: 'flex', alignItems: 'center', gap: 7 }}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round">
+          <path d="M18 20V10M12 20V4M6 20v-6" />
+        </svg>
+        {poll.question}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {poll.options.map((opt, i) => {
+          const count = poll.counts[i] || 0;
+          const pct   = total ? Math.round((count / total) * 100) : 0;
+          const mine  = poll.my_vote === i;
+          return (
+            <button key={i} onClick={() => vote(i)} disabled={busy}
+              style={{
+                position: 'relative', overflow: 'hidden',
+                textAlign: 'left', padding: '9px 12px', borderRadius: 9,
+                border: `1.5px solid ${mine ? 'var(--blue)' : 'var(--line)'}`,
+                background: 'var(--card)', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)',
+              }}>
+              {voted && (
+                <div style={{
+                  position: 'absolute', inset: 0, width: `${pct}%`,
+                  background: mine ? 'var(--blue-soft)' : 'var(--bg-2, #f1f5f9)',
+                  transition: 'width .4s ease', zIndex: 0,
+                }} />
+              )}
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <span>{mine ? '✓ ' : ''}{opt}</span>
+                {voted && <span style={{ color: 'var(--ink-3)', fontWeight: 700 }}>{pct}%</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 8 }}>
+        {total} {total === 1 ? 'vote' : 'votes'}{voted ? '' : ' · tap an option to vote'}
+      </div>
     </div>
   );
 }

@@ -16,12 +16,24 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
   const [file, setFile]             = useState(null);
   const [isAnonymous, setIsAnonymous] = useState(initialAnon);
 
+  // Optional poll
+  const [pollOn, setPollOn]         = useState(false);
+  const [pollQ, setPollQ]           = useState('');
+  const [pollOpts, setPollOpts]     = useState(['', '']);
+
   function onFileChange(e) {
     setFile(e.target.files?.[0] || null);
   }
+  function setOpt(i, v) { setPollOpts(o => o.map((x, idx) => idx === i ? v : x)); }
+  function addOpt()     { setPollOpts(o => o.length >= 6 ? o : [...o, '']); }
+  function removeOpt(i) { setPollOpts(o => o.length <= 2 ? o : o.filter((_, idx) => idx !== i)); }
 
   async function submit() {
     if (!title.trim()) { toast('Please enter a title'); return; }
+    const cleanOpts = pollOpts.map(o => o.trim()).filter(Boolean);
+    if (pollOn && (!pollQ.trim() || cleanOpts.length < 2)) {
+      toast('A poll needs a question and at least 2 options'); return;
+    }
     try {
       const fd = new FormData();
       fd.append('tag', tag);
@@ -31,9 +43,15 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
       if (file) fd.append('image', file);
 
       const post = await pb.upload('/posts', fd);
+      if (pollOn) {
+        try {
+          await pb.post(`/posts/${post.id}/poll`, { question: pollQ.trim(), options: cleanOpts });
+          post.has_poll = true;
+        } catch { /* poll optional — post still created */ }
+      }
       onCreated({ ...post, replies: [] });
       onClose();
-      toast(isAnonymous ? 'Posted anonymously!' : file ? 'Post with image shared!' : 'Post shared!');
+      toast(isAnonymous ? 'Posted anonymously!' : pollOn ? 'Poll posted!' : file ? 'Post with image shared!' : 'Post shared!');
     } catch (err) {
       toast('Failed to post: ' + err.message);
     }
@@ -123,6 +141,73 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
                   border: '1px solid var(--line)', background: 'transparent',
                   color: 'var(--ink-2)', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Remove</button>
+              </div>
+            )}
+          </div>
+
+          {/* Poll toggle + builder */}
+          <div style={{
+            marginTop: 12, padding: 14, borderRadius: 12,
+            border: `1.5px solid ${pollOn ? '#7C3AED' : 'var(--line-2)'}`,
+            background: pollOn ? 'rgba(124,58,237,.05)' : 'var(--bg)',
+          }}>
+            <div onClick={() => setPollOn(v => !v)} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, cursor: 'pointer',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={pollOn ? '#7C3AED' : 'var(--ink-3)'} strokeWidth="2" strokeLinecap="round">
+                  <path d="M18 20V10M12 20V4M6 20v-6" />
+                </svg>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: pollOn ? '#7C3AED' : 'var(--ink)' }}>Add a poll</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 1 }}>Let the community vote on options</div>
+                </div>
+              </div>
+              <div style={{
+                width: 38, height: 22, borderRadius: 999, flexShrink: 0, position: 'relative',
+                background: pollOn ? '#7C3AED' : 'var(--line-2)', transition: 'background .15s',
+              }}>
+                <div style={{
+                  position: 'absolute', top: 2, left: pollOn ? 18 : 2,
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .15s',
+                }} />
+              </div>
+            </div>
+
+            {pollOn && (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <input
+                  value={pollQ} onChange={(e) => setPollQ(e.target.value)}
+                  placeholder="Ask a question…"
+                  style={{ padding: '9px 12px', borderRadius: 9, border: '1.5px solid var(--line)',
+                           fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600,
+                           background: 'var(--card)', color: 'var(--ink)', outline: 'none' }}
+                />
+                {pollOpts.map((opt, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      value={opt} onChange={(e) => setOpt(i, e.target.value)}
+                      placeholder={`Option ${i + 1}`}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: 9, border: '1.5px solid var(--line)',
+                               fontFamily: 'inherit', fontSize: 13, background: 'var(--card)', color: 'var(--ink)', outline: 'none' }}
+                    />
+                    {pollOpts.length > 2 && (
+                      <button onClick={() => removeOpt(i)} style={{
+                        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                        border: '1.5px solid var(--line)', background: 'transparent',
+                        color: 'var(--ink-3)', cursor: 'pointer', fontSize: 16,
+                      }}>×</button>
+                    )}
+                  </div>
+                ))}
+                {pollOpts.length < 6 && (
+                  <button onClick={addOpt} style={{
+                    alignSelf: 'flex-start', padding: '6px 12px', borderRadius: 8,
+                    border: '1.5px dashed var(--line-2)', background: 'transparent',
+                    color: 'var(--ink-2)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                  }}>+ Add option</button>
+                )}
               </div>
             )}
           </div>

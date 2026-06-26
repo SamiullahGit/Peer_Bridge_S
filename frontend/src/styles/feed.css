@@ -557,6 +557,7 @@
   transition: background .15s, color .15s;
 }
 .composer-quick:hover { background: #EFF3FA; color: #0D1B2A; }
+.gs-row:hover { background: var(--blue-soft, #EFF6FF); }
 .composer-post-btn {
   margin-left: auto;
   display: inline-flex; align-items: center; gap: 7px;
