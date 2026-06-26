@@ -37,6 +37,8 @@ const NAV_ITEMS = [
     icon: <path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" /> },
   { key: 'groups',    to: '/groups',    label: 'Study Groups',
     icon: <><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></> },
+  { key: 'leaderboard', to: '/leaderboard', label: 'Leaderboard',
+    icon: <><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 5h2a2 2 0 0 1 0 4h-2M7 5H5a2 2 0 0 0 0 4h2"/></> },
   { key: 'saved',     to: '/saved',     label: 'Saved',
     icon: <path d="M5 3h12v18l-6-4-6 4V3Z" /> },
 ];

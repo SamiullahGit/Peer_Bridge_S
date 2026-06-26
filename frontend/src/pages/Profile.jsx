@@ -14,6 +14,7 @@ import { tagTone, linkifyHTML } from '../utils/format.js';
 import { ProfileSkeleton } from '../components/Skeleton.jsx';
 import VerifiedTick, { isVerified } from '../components/VerifiedTick.jsx';
 import FollowListModal from '../components/FollowListModal.jsx';
+import { badgesFor } from '../utils/badges.js';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
 
@@ -417,6 +418,19 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
             <strong style={{ color: 'var(--ink)', fontWeight: 700 }}><CountUp value={p.following_count || 0} /></strong> following
           </button>
         </div>
+
+        {/* Achievement badges */}
+        {badgesFor(p).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+            {badgesFor(p).map((b) => (
+              <span key={b.key} className="stat-pop" style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700,
+                background: `${b.color}1a`, color: b.color, border: `1px solid ${b.color}40`,
+              }}>{b.emoji} {b.label}</span>
+            ))}
+          </div>
+        )}
 
         {/* Animated stat cards */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
