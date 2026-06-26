@@ -67,6 +67,8 @@ export default function Feed() {
   const [events, setEvents]     = useState([]);
   const [mentors, setMentors]   = useState([]);
   const [filter, setFilter]     = useState('For you');
+  const [sortBy, setSortBy]     = useState('recent');   // recent | liked | discussed
+  const [sortOpen, setSortOpen] = useState(false);
   const [loading, setLoading]   = useState(true);   // initial feed load
 
   // Per-post UI state
@@ -144,15 +146,25 @@ export default function Feed() {
     }
   }
 
-  // ── Filtering ─────────────────────────────────────────────────────
-  const filteredPosts = filter === 'For you'
+  // ── Filtering + sorting ───────────────────────────────────────────
+  const SORT_LABELS = { recent: 'Recent', liked: 'Most liked', discussed: 'Most discussed' };
+
+  const filteredPosts = (filter === 'For you'
     ? posts
-    : posts.filter((p) => p.tag.toLowerCase().includes(filter.toLowerCase()));
+    : posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()))
+  ).slice().sort((a, b) => {
+    if (sortBy === 'liked')     return (b.likes_count    || 0) - (a.likes_count    || 0);
+    if (sortBy === 'discussed') return (b.comments_count || 0) - (a.comments_count || 0);
+    return new Date(b.created_at) - new Date(a.created_at);   // recent
+  });
 
   // ── Action handlers ───────────────────────────────────────────────
   function debounceSearch(val) {
     clearTimeout(searchTimer.current);
     setSearch(val);
+    // Searching across all tags — reset the active tab so matches aren't
+    // hidden by a category filter.
+    if (val.trim()) setFilter('For you');
     searchTimer.current = setTimeout(async () => {
       if (!val.trim()) return loadAll();
       try { setPosts(await pb.get('/posts?search=' + encodeURIComponent(val))); }
@@ -377,48 +389,82 @@ export default function Feed() {
                 onClick={() => setFilter(f.key)}
               >{f.label}</button>
             ))}
-            <button className="sort-btn">
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
-                   stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
-                <path d="M1 3h11M3 6.5h7M5 10h3" />
-              </svg>
-              Sort: Recent
-            </button>
+            <div className="sort-wrap" style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button className="sort-btn" style={{ marginLeft: 0 }} onClick={() => setSortOpen((o) => !o)}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
+                     stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                  <path d="M1 3h11M3 6.5h7M5 10h3" />
+                </svg>
+                Sort: {SORT_LABELS[sortBy]}
+              </button>
+              {sortOpen && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setSortOpen(false)} />
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
+                    minWidth: 170, background: 'var(--card)', border: '1.5px solid var(--line)',
+                    borderRadius: 10, boxShadow: 'var(--shadow-md, 0 8px 24px rgba(0,0,0,.12))',
+                    overflow: 'hidden', padding: 4,
+                  }}>
+                    {Object.entries(SORT_LABELS).map(([key, label]) => (
+                      <button key={key}
+                        onClick={() => { setSortBy(key); setSortOpen(false); }}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '8px 12px',
+                          borderRadius: 7, border: 'none', cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: 13, fontWeight: sortBy === key ? 700 : 500,
+                          background: sortBy === key ? 'var(--blue-soft)' : 'transparent',
+                          color: sortBy === key ? 'var(--blue)' : 'var(--ink-2)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                        }}>
+                        {label}
+                        {sortBy === key && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                               stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6 9 17l-5-5" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="composer-card">
+          <div className="composer-card composer-card-v2">
             <div className="composer-top" onClick={() => openComposer()}>
               {me?.profile_image
                 ? <img src={me.profile_image} alt={me.name}
-                       style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                       style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                 : <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
+                    width: 42, height: 42, borderRadius: '50%',
                     background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 13, fontWeight: 700, color: 'white', flexShrink: 0,
+                    fontSize: 15, fontWeight: 700, color: 'white', flexShrink: 0,
                   }}>{initials}</div>}
-              <span className="composer-placeholder">What's on your mind? Ask or share something…</span>
+              <span className="composer-placeholder">
+                Share a question, insight, or update with the community…
+              </span>
             </div>
-            <div className="composer-bottom">
-              <button className="composer-action-btn" onClick={() => openComposer('Academic Help')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-                Ask
+            <div className="composer-bottom-v2">
+              <button className="composer-quick" onClick={() => openComposer()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+                </svg>
+                Photo
               </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Career & Internships')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-                Career
-              </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Resources')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                Resource
-              </button>
-              <button className="composer-action-btn" onClick={() => openComposer('Events & Societies')}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                Event
-              </button>
-              <button className="composer-action-btn composer-action-anon" onClick={() => openComposer('Academic Help', true)}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <button className="composer-quick" onClick={() => openComposer('Academic Help', true)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
                 Anonymous
+              </button>
+              <button className="composer-post-btn" onClick={() => openComposer()}>
+                Post
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                  <path d="M2 7h10M7 2l5 5-5 5" />
+                </svg>
               </button>
             </div>
           </div>
@@ -612,8 +658,8 @@ function FeedSidebar({ isMentor, requestsCount, unreadMsgs, onToggle, onLogout, 
       <FeedNavLink to="/mentors"   label="Mentors" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></>} />
       <FeedNavLink to="/resources" label="Resources" onNavigate={onNavigate} icon={<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z" />} />
       <FeedNavLink to="/events"    label="Events" onNavigate={onNavigate} icon={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>} />
-      <FeedNavLink to="/groups"    label="Study Groups" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></>} />
       <FeedNavLink to="/messages"  label="Messages" badge={unreadMsgs} onNavigate={() => { onNavigate(); onMarkMsgsRead(); }} icon={<path d="M14.5 10a1 1 0 0 1-1 1H4L1 14V3a1 1 0 0 1 1-1h11.5a1 1 0 0 1 1 1v7z" />} />
+      <FeedNavLink to="/groups"    label="Study Groups" onNavigate={onNavigate} icon={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></>} />
       <FeedNavLink to="/saved"     label="Saved" onNavigate={onNavigate} icon={<path d="M5 3h12v18l-6-4-6 4V3Z" />} />
 
       {isMentor && (
