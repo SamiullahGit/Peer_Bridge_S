@@ -23,6 +23,7 @@ import '../styles/feed.css';
 
 const FILTERS = [
   { key: 'For you',   label: 'For you' },
+  { key: 'Following', label: 'Following' },
   { key: 'Academic',  label: 'Academic' },
   { key: 'Career',    label: 'Career' },
   { key: 'Resources', label: 'Resources' },
@@ -87,6 +88,9 @@ export default function Feed() {
   // Mentor requests (for the sidebar badge)
   const [requests, setRequests] = useState([]);
 
+  // People the viewer follows (for the "Following" feed filter)
+  const [followingIds, setFollowingIds] = useState(new Set());
+
   // Search
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState(null);   // {posts,mentors,resources}
@@ -96,6 +100,14 @@ export default function Feed() {
 
   // ── Effects ───────────────────────────────────────────────────────
   useEffect(() => { loadAll(); /* eslint-disable-next-line */ }, []);
+
+  // Load who I follow (once) so the "Following" filter can work.
+  useEffect(() => {
+    if (!me?.id) return;
+    pb.get(`/users/${me.id}/following`)
+      .then((list) => setFollowingIds(new Set((list || []).map((u) => u.id))))
+      .catch(() => {});
+  }, [me?.id]);
 
   useEffect(() => {
     if (!isMentor) return;
@@ -153,10 +165,12 @@ export default function Feed() {
   // ── Filtering + sorting ───────────────────────────────────────────
   const SORT_LABELS = { recent: 'Recent', liked: 'Most liked', discussed: 'Most discussed' };
 
-  const filteredPosts = (filter === 'For you'
-    ? posts
-    : posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()))
-  ).slice().sort((a, b) => {
+  const base =
+    filter === 'For you'   ? posts :
+    filter === 'Following' ? posts.filter((p) => followingIds.has(p.author_id)) :
+    posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()));
+
+  const filteredPosts = base.slice().sort((a, b) => {
     if (sortBy === 'liked')     return (b.likes_count    || 0) - (a.likes_count    || 0);
     if (sortBy === 'discussed') return (b.comments_count || 0) - (a.comments_count || 0);
     return new Date(b.created_at) - new Date(a.created_at);   // recent
@@ -437,11 +451,11 @@ export default function Feed() {
               </button>
               {sortOpen && (
                 <>
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setSortOpen(false)} />
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 300 }} onClick={() => setSortOpen(false)} />
                   <div style={{
-                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
-                    minWidth: 170, background: 'var(--card)', border: '1.5px solid var(--line)',
-                    borderRadius: 10, boxShadow: 'var(--shadow-md, 0 8px 24px rgba(0,0,0,.12))',
+                    position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 301,
+                    minWidth: 180, background: 'var(--card)', border: '1.5px solid var(--line)',
+                    borderRadius: 10, boxShadow: 'var(--shadow-lg, 0 16px 40px rgba(0,0,0,.2))',
                     overflow: 'hidden', padding: 4,
                   }}>
                     {Object.entries(SORT_LABELS).map(([key, label]) => (
@@ -470,41 +484,25 @@ export default function Feed() {
             </div>
           </div>
 
-          <div className="composer-card composer-card-v2">
-            <div className="composer-top" onClick={() => openComposer()}>
-              {me?.profile_image
-                ? <img src={me.profile_image} alt={me.name}
-                       style={{ width: 42, height: 42, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-                : <div style={{
-                    width: 42, height: 42, borderRadius: '50%',
-                    background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 15, fontWeight: 700, color: 'white', flexShrink: 0,
-                  }}>{initials}</div>}
-              <span className="composer-placeholder">
-                Share a question, insight, or update with the community…
-              </span>
-            </div>
-            <div className="composer-bottom-v2">
-              <button className="composer-quick" onClick={() => openComposer()}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
-                </svg>
-                Photo
-              </button>
-              <button className="composer-quick" onClick={() => openComposer('Academic Help', true)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-                Anonymous
-              </button>
-              <button className="composer-post-btn" onClick={() => openComposer()}>
-                Post
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
-                  <path d="M2 7h10M7 2l5 5-5 5" />
-                </svg>
-              </button>
-            </div>
+          <div className="composer-card composer-card-v2 composer-clean" onClick={() => openComposer()}>
+            {me?.profile_image
+              ? <img src={me.profile_image} alt={me.name}
+                     style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              : <div style={{
+                  width: 44, height: 44, borderRadius: '50%',
+                  background: 'linear-gradient(135deg,#2563EB,#60A5FA)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 16, fontWeight: 700, color: 'white', flexShrink: 0,
+                }}>{initials}</div>}
+            <span className="composer-placeholder">
+              Share a question, insight, or update…
+            </span>
+            <span className="composer-write-chip">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+              Write
+            </span>
           </div>
 
           {loading ? (
@@ -629,7 +627,10 @@ export default function Feed() {
             <div className="panel-card-header">
               <div className="panel-card-title">Trending topics</div>
             </div>
-            <div>{TRENDING.map((t) => <span key={t} className="topic-pill">{t}</span>)}</div>
+            <div>{TRENDING.map((t) => (
+              <span key={t} className="topic-pill" style={{ cursor: 'pointer' }}
+                    onClick={() => debounceSearch(t.replace(/^#/, ''))}>{t}</span>
+            ))}</div>
           </div>
         </aside>
       </div>

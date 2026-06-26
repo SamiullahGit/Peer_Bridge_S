@@ -59,8 +59,16 @@ export default function Profile() {
 
   const [showReport, setShowReport] = useState(false);
   const [followModal, setFollowModal] = useState(null);   // 'followers' | 'following' | null
+  const [postTab, setPostTab] = useState('all');          // 'all' | 'media'
 
   useEffect(() => { loadProfile(); /* eslint-disable-next-line */ }, [profileId]);
+
+  function shareProfile() {
+    const url = `${location.origin}/profile?id=${profileId}`;
+    navigator.clipboard?.writeText(url)
+      .then(() => toast('Profile link copied!'))
+      .catch(() => toast(url));
+  }
 
   async function toggleFollow() {
     // Optimistic update; reload from server on failure.
@@ -243,10 +251,14 @@ export default function Profile() {
                     onFollow={toggleFollow}
                     onShowFollowers={() => setFollowModal('followers')}
                     onShowFollowing={() => setFollowModal('following')}
+                    onShare={shareProfile}
                   />}
             </div>
           </div>
         </div>
+
+        {/* Profile completeness (own profile only, while incomplete) */}
+        {isSelf && <CompletenessCard p={p} onEdit={() => setEditMode(true)} onAddPhoto={() => {}} />}
 
         {/* XP & Certificate (own profile only) */}
         {isSelf && (
@@ -257,12 +269,30 @@ export default function Profile() {
 
         {/* Posts */}
         <div className="card" style={{ padding: 22 }}>
-          <div className="serif" style={{ fontSize: 22, marginBottom: 16 }}>
-            {isSelf ? 'Your posts' : `Posts by ${p.name}`}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <div className="serif" style={{ fontSize: 22 }}>
+              {isSelf ? 'Your posts' : `Posts by ${p.name}`}
+            </div>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg-2)', borderRadius: 9, padding: 3 }}>
+              {[['all', 'All'], ['media', 'Media']].map(([k, label]) => (
+                <button key={k} onClick={() => setPostTab(k)} style={{
+                  padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600,
+                  background: postTab === k ? 'var(--card)' : 'transparent',
+                  color: postTab === k ? 'var(--ink)' : 'var(--ink-3)',
+                  boxShadow: postTab === k ? 'var(--shadow-sm)' : 'none',
+                }}>{label}</button>
+              ))}
+            </div>
           </div>
-          {(p.posts || []).length === 0
-            ? <div className="empty-state"><p>No posts yet</p></div>
-            : (p.posts || []).map((post, i) => (
+          {(() => {
+            const shown = postTab === 'media'
+              ? (p.posts || []).filter((post) => post.image_path)
+              : (p.posts || []);
+            return shown.length === 0
+              ? <div className="empty-state"><p>{postTab === 'media' ? 'No posts with images yet' : 'No posts yet'}</p></div>
+              : shown.map((post, i) => (
                 <PostRow
                   key={post.id}
                   post={post}
@@ -271,7 +301,8 @@ export default function Profile() {
                   onDelete={deletePost}
                   onUpdate={updatePost}
                 />
-              ))}
+              ));
+          })()}
         </div>
       </div>
 
@@ -307,6 +338,48 @@ export default function Profile() {
 
 /* ── Sub-components ──────────────────────────────────────────────── */
 
+// Profile completeness nudge — only shown to the owner while < 100%.
+function CompletenessCard({ p, onEdit }) {
+  const checks = [
+    { ok: !!p.profile_image, label: 'Add a profile picture' },
+    { ok: !!(p.bio && p.bio.trim()), label: 'Write a short bio' },
+    { ok: Array.isArray(p.skills) && p.skills.length > 0, label: 'Add skills & expertise' },
+    { ok: !!p.department, label: 'Set your department' },
+    { ok: !!p.graduation_year, label: 'Add your graduation year' },
+  ];
+  const done = checks.filter((c) => c.ok).length;
+  const pct  = Math.round((done / checks.length) * 100);
+  if (pct === 100) return null;
+
+  return (
+    <div className="card fade-up" style={{ padding: 20, marginBottom: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Complete your profile</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-3)', marginTop: 2 }}>A complete profile gets more connections.</div>
+        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--blue)' }}><CountUp value={pct} />%</div>
+      </div>
+      <div style={{ height: 8, borderRadius: 999, background: 'var(--bg-2)', overflow: 'hidden', marginBottom: 14 }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999,
+                      background: 'linear-gradient(90deg,#2563EB,#7C3AED)', transition: 'width .6s ease' }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {checks.filter((c) => !c.ok).map((c) => (
+          <button key={c.label} onClick={onEdit} style={{
+            display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 9,
+            border: '1px dashed var(--line-2)', background: 'transparent', cursor: 'pointer',
+            fontFamily: 'inherit', fontSize: 13, color: 'var(--ink-2)', textAlign: 'left',
+          }}>
+            <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--line-2)', flexShrink: 0 }} />
+            {c.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ label, value, text, delay = 0, accent = 'var(--blue)' }) {
   return (
     <div className="profile-stat-card stat-pop" style={{
@@ -322,7 +395,7 @@ function StatCard({ label, value, text, delay = 0, accent = 'var(--blue)' }) {
   );
 }
 
-function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing }) {
+function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, onFollow, onShowFollowers, onShowFollowing, onShare }) {
   const statBtn = {
     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
     font: 'inherit', fontSize: 13.5, color: 'var(--ink-2)',
@@ -387,6 +460,14 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <button className="btn btn-ghost" onClick={onShare} style={{ padding: '10px 16px', fontSize: 13.5,
+                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+            <line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" />
+          </svg>
+          Share
+        </button>
         {isSelf ? (
           <button className="btn btn-ghost" onClick={onEdit} style={{ padding: '10px 16px', fontSize: 13.5 }}>Edit profile</button>
         ) : (

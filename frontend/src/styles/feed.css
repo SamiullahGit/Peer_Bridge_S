@@ -575,6 +575,25 @@
 [data-theme="dark"] .composer-quick { color: var(--ink-2); }
 [data-theme="dark"] .composer-quick:hover { background: var(--bg-3, var(--bg)); color: var(--ink); }
 
+/* Clean single-row composer banner */
+.composer-clean {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; cursor: pointer;
+}
+.composer-clean .composer-placeholder {
+  flex: 1; font-size: 15px; color: #8899B0; user-select: none;
+}
+.composer-write-chip {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  padding: 9px 18px; border-radius: 10px;
+  background: linear-gradient(135deg, #2563EB, #3B82F6); color: #fff;
+  font-size: 13.5px; font-weight: 700;
+  box-shadow: 0 2px 10px rgba(37,99,235,.28);
+  transition: transform .15s, box-shadow .15s;
+}
+.composer-clean:hover .composer-write-chip { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37,99,235,.4); }
+[data-theme="dark"] .composer-clean .composer-placeholder { color: var(--ink-3); }
+
 @media (max-width: 700px) {
   /* The panel flows below the feed on phones, so the desktop-oriented
      "Hide panel" toggle is redundant here - keep it tidy. */
