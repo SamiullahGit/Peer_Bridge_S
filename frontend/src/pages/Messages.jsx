@@ -30,6 +30,7 @@ export default function Messages() {
   const [draft, setDraft]       = useState('');
   const [search, setSearch]     = useState('');
   const [attach, setAttach]     = useState(null);   // { file, kind }
+  const [replyTo, setReplyTo]   = useState(null);   // message being replied to
   const pollRef     = useRef(null);
   const scrollRef   = useRef(null);
   const fileRef     = useRef(null);
@@ -85,16 +86,18 @@ export default function Messages() {
     if ((!text && !attach) || !activeId) return;
     setDraft('');
     const sending = attach;
-    setAttach(null);
+    const replyId = replyTo?.id || null;
+    setAttach(null); setReplyTo(null);
     try {
       let m;
       if (sending) {
         const fd = new FormData();
         if (text) fd.append('text', text);
+        if (replyId) fd.append('reply_to', replyId);
         fd.append('attachment', sending.file, sending.file.name);
         m = await pb.upload(`/messages/${activeId}`, fd);
       } else {
-        m = await pb.post(`/messages/${activeId}`, { text });
+        m = await pb.post(`/messages/${activeId}`, { text, reply_to: replyId });
       }
       setMsgs((prev) => [...prev, m]);
       loadConvos();
@@ -102,6 +105,7 @@ export default function Messages() {
       toast('Failed to send');
       setDraft(text);
       setAttach(sending);
+      if (replyId) setReplyTo(replyTo);
     }
   }
 
@@ -168,19 +172,52 @@ export default function Messages() {
 
                 <div className="chat-msgs" ref={scrollRef}>
                   <div className="chat-date-divider">Today</div>
-                  {msgs.map((m) => (
-                    <div key={m.id}
-                         className={`bubble ${m.sender_id === me?.id ? 'bubble-me' : 'bubble-them'}`}>
-                      {m.attachment_url && <Attachment m={m} />}
-                      {m.text}
-                      <div className="bubble-time"
-                           style={{ textAlign: m.sender_id === me?.id ? 'right' : 'left' }}>
-                        {timeAgo(m.created_at)}
+                  {msgs.map((m) => {
+                    const mine   = m.sender_id === me?.id;
+                    const parent = m.reply_to ? msgs.find((x) => x.id === m.reply_to) : null;
+                    return (
+                      <div key={m.id} className={`bubble-row${mine ? ' mine' : ''}`}>
+                        <div className={`bubble ${mine ? 'bubble-me' : 'bubble-them'}`}>
+                          {parent && <QuotedReply m={parent} mine={mine} />}
+                          {m.attachment_url && <Attachment m={m} />}
+                          {m.text}
+                          <div className="bubble-time"
+                               style={{ textAlign: mine ? 'right' : 'left' }}>
+                            {timeAgo(m.created_at)}
+                          </div>
+                        </div>
+                        <button className="bubble-reply-btn" title="Reply" onClick={() => setReplyTo(m)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                          </svg>
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
+                {replyTo && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 14px', margin: '0 14px',
+                    background: 'var(--bg-2)', borderLeft: '3px solid var(--blue)',
+                    borderRadius: 8, fontSize: 13,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--blue)' }}>
+                        Replying to {replyTo.sender_id === me?.id ? 'yourself' : activeName}
+                      </div>
+                      <div style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {replyTo.text || (replyTo.attachment_type === 'image' ? '📷 Photo'
+                          : replyTo.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment')}
+                      </div>
+                    </div>
+                    <button onClick={() => setReplyTo(null)} style={{
+                      border: 'none', background: 'transparent', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 17,
+                    }}>×</button>
+                  </div>
+                )}
                 {attach && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: 10,
@@ -234,6 +271,25 @@ export default function Messages() {
 }
 
 /* ── Bits ────────────────────────────────────────────────────────── */
+
+// Small quoted preview of the message being replied to, shown inside a bubble.
+export function QuotedReply({ m, mine }) {
+  const label = m.text || (m.attachment_type === 'image' ? '📷 Photo'
+    : m.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment');
+  return (
+    <div style={{
+      borderLeft: `3px solid ${mine ? 'rgba(255,255,255,.6)' : 'var(--blue)'}`,
+      background: mine ? 'rgba(255,255,255,.14)' : 'var(--bg-2)',
+      borderRadius: 6, padding: '5px 9px', marginBottom: 6,
+      fontSize: 12.5, maxWidth: '100%',
+    }}>
+      <div style={{ fontWeight: 700, fontSize: 11, opacity: .85, marginBottom: 1 }}>
+        {m.sender_name || 'Reply'}
+      </div>
+      <div style={{ opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+    </div>
+  );
+}
 
 // Render a message attachment: image preview, audio player, or file chip.
 export function Attachment({ m }) {

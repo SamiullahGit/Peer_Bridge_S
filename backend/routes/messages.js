@@ -77,6 +77,7 @@ router.post('/:userId', auth, upload.single('attachment'), async (req, res) => {
     const row = {
       sender_id: req.user.id, receiver_id: req.params.userId,
       text: text || null,
+      reply_to: req.body.reply_to || null,
     };
     if (file) {
       row.attachment_url  = fileUrl(file);

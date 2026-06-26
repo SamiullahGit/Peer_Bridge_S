@@ -106,6 +106,7 @@ export default function Groups() {
   const [membersLoading,setMembersLoading]= useState(false);
 
   const [attach, setAttach] = useState(null);   // { file, kind }
+  const [replyTo, setReplyTo] = useState(null);  // group message being replied to
   const messagesEndRef = useRef(null);
   const pollRef        = useRef(null);
   const inputRef       = useRef(null);
@@ -191,19 +192,21 @@ export default function Groups() {
     const text = draft.trim();
     if ((!text && !attach) || !activeGroup) return;
     setSending(true); setDraft('');
-    const sending = attach; setAttach(null);
+    const sending = attach; const replyId = replyTo?.id || null;
+    setAttach(null); setReplyTo(null);
     try {
       let msg;
       if (sending) {
         const fd = new FormData();
         if (text) fd.append('text', text);
+        if (replyId) fd.append('reply_to', replyId);
         fd.append('attachment', sending.file, sending.file.name);
         msg = await pb.upload(`/groups/${activeGroup.id}/messages`, fd);
       } else {
-        msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text });
+        msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text, reply_to: replyId });
       }
       setMessages(prev => [...prev, msg]);
-    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); setAttach(sending); }
+    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); setAttach(sending); if (replyId) setReplyTo(replyTo); }
     finally { setSending(false); inputRef.current?.focus(); }
   }
 
@@ -583,17 +586,43 @@ export default function Groups() {
                                 {msg.sender_name}
                               </div>
                             )}
-                            <div style={{
+                            <div className="gmsg-bubble" style={{
                               padding: msg.attachment_type === 'image' ? 6 : '7px 11px',
                               borderRadius: isMe ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
                               background: isMe ? C.blue : C.bubble,
                               color: isMe ? 'white' : C.ink,
                               fontSize: 13.5, lineHeight: 1.5,
                               border: isMe ? 'none' : `1px solid ${C.bubbleBorder}`,
-                              wordBreak: 'break-word',
+                              wordBreak: 'break-word', position: 'relative',
                             }}>
+                              {msg.reply_to && (() => {
+                                const parent = messages.find(x => x.id === msg.reply_to);
+                                if (!parent) return null;
+                                const label = parent.text || (parent.attachment_type === 'image' ? '📷 Photo'
+                                  : parent.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment');
+                                return (
+                                  <div style={{
+                                    borderLeft: `3px solid ${isMe ? 'rgba(255,255,255,.6)' : C.blue}`,
+                                    background: isMe ? 'rgba(255,255,255,.14)' : (dark ? '#0e1117' : '#eef1f6'),
+                                    borderRadius: 6, padding: '4px 8px', marginBottom: 5, fontSize: 12,
+                                  }}>
+                                    <div style={{ fontWeight: 700, fontSize: 10.5, opacity: .85 }}>{parent.sender_name}</div>
+                                    <div style={{ opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                                  </div>
+                                );
+                              })()}
                               {msg.attachment_url && <Attachment m={msg} />}
                               {msg.text}
+                              <button className="gmsg-reply-btn" title="Reply" onClick={() => setReplyTo(msg)} style={{
+                                position: 'absolute', top: -10, [isMe ? 'left' : 'right']: -8,
+                                width: 24, height: 24, borderRadius: '50%', cursor: 'pointer',
+                                border: `1px solid ${C.line}`, background: C.card, color: C.ink3,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                                </svg>
+                              </button>
                             </div>
                             <div style={{
                               fontSize: 9.5, color: C.ink3, marginTop: 2,
@@ -626,6 +655,24 @@ export default function Groups() {
                   borderTop: `1px solid ${C.line}`,
                   background: C.card, flexShrink: 0,
                 }}>
+                  {replyTo && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7,
+                      padding: '7px 11px', borderRadius: 8,
+                      background: dark ? '#0e1117' : '#eef1f6', borderLeft: `3px solid ${C.blue}`, fontSize: 12.5,
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.blue }}>Replying to {replyTo.sender_name}</div>
+                        <div style={{ color: C.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {replyTo.text || (replyTo.attachment_type === 'image' ? '📷 Photo'
+                            : replyTo.attachment_type === 'audio' ? '🎙️ Voice note' : '📎 Attachment')}
+                        </div>
+                      </div>
+                      <button type="button" onClick={() => setReplyTo(null)} style={{
+                        border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer', fontSize: 16,
+                      }}>×</button>
+                    </div>
+                  )}
                   {attach && (
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7,

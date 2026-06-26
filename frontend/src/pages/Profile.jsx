@@ -154,6 +154,26 @@ export default function Profile() {
     }
   }
 
+  const [uploadingPic, setUploadingPic] = useState(false);
+  async function uploadAvatar(file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast('Please choose an image'); return; }
+    if (file.size > 5 * 1024 * 1024)     { toast('Image must be under 5 MB'); return; }
+    setUploadingPic(true);
+    try {
+      const fd = new FormData();
+      fd.append('profile_image', file);
+      const updated = await pb.upload('/users/me/avatar', fd);
+      setAuth(token, { ...me, ...updated });
+      setProfile((prev) => ({ ...prev, ...updated }));
+      toast('Profile picture updated!');
+    } catch (e) {
+      toast(e.message || 'Failed to upload picture');
+    } finally {
+      setUploadingPic(false);
+    }
+  }
+
   if (!profile) {
     return (
       <Sidebar active="profile">
@@ -183,18 +203,29 @@ export default function Profile() {
 
         {/* Profile header card */}
         <div className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ padding: '9px 20px', borderBottom: '1px solid var(--line)', background: 'var(--bg-2)' }}>
-            <button onClick={() => history.back()} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: 0, border: 'none', background: 'none',
-              fontFamily: 'inherit', fontSize: 13, fontWeight: 700, color: 'var(--blue)', cursor: 'pointer',
-            }}>&larr; Back</button>
-          </div>
           {/* Animated gradient cover */}
           <div className="profile-cover" />
           <div style={{ padding: '0 32px 32px', display: 'flex', alignItems: 'flex-start', gap: 24, flexWrap: 'wrap' }}>
-            <div className="profile-avatar-wrap">
+            <div className="profile-avatar-wrap" style={{ position: 'relative' }}>
               <Avatar name={p.name} size={88} imgUrl={p.profile_image || ''} />
+              {isSelf && (
+                <label title="Change profile picture" style={{
+                  position: 'absolute', bottom: 2, right: 2, width: 30, height: 30,
+                  borderRadius: '50%', background: 'var(--blue)', border: '3px solid var(--card)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: uploadingPic ? 'wait' : 'pointer',
+                }}>
+                  {uploadingPic ? (
+                    <span style={{ color: '#fff', fontSize: 11 }}>…</span>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+                    </svg>
+                  )}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                         disabled={uploadingPic}
+                         onChange={(e) => uploadAvatar(e.target.files?.[0])} />
+                </label>
+              )}
             </div>
             <div style={{ flex: 1, minWidth: 200, paddingTop: 18 }}>
               {editMode

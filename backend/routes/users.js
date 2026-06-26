@@ -3,10 +3,21 @@ const router = require('express').Router();
 const auth          = require('../middleware/auth');
 const { supabase }  = require('../config/supabase');
 const xpManager     = require('../services/xpManager');
+const multer        = require('multer');
 const { sendMail }  = require('../services/mailer');
 const emailTpl      = require('../services/emailTemplates');
 const { notify }    = require('../services/notify');
+const { makeStorage, fileUrl } = require('../config/storage');
 const { PUBLIC_FIELDS, toSafeUser } = require('../data/shapers');
+
+const avatarUpload = multer({
+  storage: makeStorage('avatars', 'avatar'),
+  limits : { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) return cb(new Error('Only image uploads are allowed'));
+    cb(null, true);
+  },
+});
 
 // Make a free-text term safe for a PostgREST ilike / .or() filter.
 function likeTerm(s) {
@@ -173,6 +184,27 @@ router.delete('/me', auth, async (req, res) => {
   } catch {
     res.status(500).json({ error: 'Failed to delete account' });
   }
+});
+
+// Upload / change the current user's profile picture.
+router.post('/me/avatar', auth, (req, res) => {
+  avatarUpload.single('profile_image')(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      const msg = uploadErr.code === 'LIMIT_FILE_SIZE' ? 'Image must be under 5 MB'
+        : uploadErr.message === 'Only image uploads are allowed' ? 'Please upload a valid image'
+        : 'Failed to upload image';
+      return res.status(400).json({ error: msg });
+    }
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+    try {
+      const { data: user } = await supabase
+        .from('users').update({ profile_image: fileUrl(req.file) })
+        .eq('id', req.user.id).select(PUBLIC_FIELDS).maybeSingle();
+      res.json(user);
+    } catch {
+      res.status(500).json({ error: 'Failed to update profile picture' });
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────

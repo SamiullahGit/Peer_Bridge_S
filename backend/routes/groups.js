@@ -232,14 +232,14 @@ router.get('/:id/messages', auth, async (req, res) => {
     if (!member) return res.status(403).json({ error: 'Join the group first' });
 
     const { data: msgs, error } = await supabase.from('group_messages')
-      .select('id, text, created_at, is_pinned, attachment_url, attachment_type, attachment_name, sender:sender_id(id,name,role,profile_image)')
+      .select('id, text, created_at, is_pinned, reply_to, attachment_url, attachment_type, attachment_name, sender:sender_id(id,name,role,profile_image)')
       .eq('group_id', req.params.id)
       .order('created_at', { ascending: true }).limit(100);
     if (error) throw error;
 
     res.json((msgs || []).map(m => ({
       id          : m.id, text: m.text, created_at: m.created_at,
-      is_pinned   : m.is_pinned || false,
+      is_pinned   : m.is_pinned || false, reply_to: m.reply_to,
       attachment_url : m.attachment_url, attachment_type: m.attachment_type, attachment_name: m.attachment_name,
       sender_id   : m.sender?.id,  sender_name : m.sender?.name,
       sender_role : m.sender?.role, sender_image: m.sender?.profile_image,
@@ -261,7 +261,8 @@ router.post('/:id/messages', auth, upload.single('attachment'), async (req, res)
       .select('user_id').eq('group_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
     if (!member) return res.status(403).json({ error: 'Join the group first' });
 
-    const row = { group_id: req.params.id, sender_id: req.user.id, text: text || null };
+    const row = { group_id: req.params.id, sender_id: req.user.id, text: text || null,
+                  reply_to: req.body.reply_to || null };
     if (file) {
       row.attachment_url  = fileUrl(file);
       row.attachment_type = attachmentType(file.mimetype);
@@ -275,7 +276,7 @@ router.post('/:id/messages', auth, upload.single('attachment'), async (req, res)
 
     res.status(201).json({
       id: msg.id, text: msg.text, created_at: msg.created_at,
-      is_pinned: false,
+      is_pinned: false, reply_to: msg.reply_to,
       attachment_url: msg.attachment_url, attachment_type: msg.attachment_type, attachment_name: msg.attachment_name,
       sender_id: req.user.id, sender_name: req.user.name,
       sender_role: req.user.role, sender_image: null,

@@ -95,6 +95,19 @@
   content: ''; flex: 1; height: 1px; background: var(--line);
 }
 
+.bubble-row { display: flex; align-items: center; gap: 6px; max-width: 100%; }
+.bubble-row.mine { flex-direction: row-reverse; align-self: flex-end; }
+.bubble-reply-btn {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  border: none; background: transparent; color: var(--ink-3);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  opacity: 0; transition: opacity .15s, background .15s, color .15s;
+}
+.bubble-row:hover .bubble-reply-btn { opacity: 1; }
+.bubble-reply-btn:hover { background: var(--blue-soft); color: var(--blue); }
+.gmsg-reply-btn { opacity: 0; transition: opacity .15s; }
+.gmsg-bubble:hover .gmsg-reply-btn { opacity: 1; }
+
 .bubble { max-width: 68%; padding: 10px 15px; border-radius: 18px;
           font-size: 14px; line-height: 1.5; position: relative; }
 .bubble-me  {
