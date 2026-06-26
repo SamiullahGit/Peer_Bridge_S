@@ -729,6 +729,11 @@ function FeedSidebar({ isMentor, requestsCount, unreadMsgs, onToggle, onLogout, 
         <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="10" r="3" />
           <path d="M7 20.66V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.66" /></>
       } />
+      {me?.role === 'admin' && (
+        <FeedNavLink to="/admin" label="Admin" onNavigate={onNavigate} icon={
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        } />
+      )}
 
       <div className="snav-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
