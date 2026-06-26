@@ -206,6 +206,14 @@ export default function Groups() {
     } catch (err) { toast(err.message || 'Failed'); }
   }
 
+  async function pinMessage(msg, pinned) {
+    // Optimistic: clear other pins, set this one.
+    setMessages(prev => prev.map(m =>
+      m.id === msg.id ? { ...m, is_pinned: pinned } : { ...m, is_pinned: pinned ? false : m.is_pinned }));
+    try { await pb.patch(`/groups/${activeGroup.id}/messages/${msg.id}/pin`, { pinned }); }
+    catch (err) { toast(err.message || 'Failed to pin'); loadMessages(activeGroup.id, true); }
+  }
+
   async function changeRole(userId, newRole) {
     try {
       await pb.patch(`/groups/${activeGroup.id}/members/${userId}/role`, { role: newRole });
@@ -491,6 +499,35 @@ export default function Groups() {
                   </button>
                 </div>
 
+                {/* Pinned announcement banner */}
+                {(() => {
+                  const pinned = messages.find(m => m.is_pinned);
+                  if (!pinned) return null;
+                  return (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9,
+                      padding: '9px 15px', background: dark ? '#1a1608' : '#fffbeb',
+                      borderBottom: `1px solid ${C.line}`, flexShrink: 0,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>
+                      </svg>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', letterSpacing: '.05em' }}>Pinned announcement</div>
+                        <div style={{ fontSize: 12.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span style={{ fontWeight: 600 }}>{pinned.sender_name}: </span>{pinned.text}
+                        </div>
+                      </div>
+                      {amAdmin && (
+                        <button onClick={() => pinMessage(pinned, false)} title="Unpin" style={{
+                          border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer',
+                          fontSize: 16, lineHeight: 1, padding: 2, flexShrink: 0,
+                        }}>×</button>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Messages */}
                 <div style={{
                   flex: 1, overflowY: 'auto', padding: '13px 15px',
@@ -537,7 +574,20 @@ export default function Groups() {
                             <div style={{
                               fontSize: 9.5, color: C.ink3, marginTop: 2,
                               textAlign: isMe ? 'right' : 'left', paddingInline: 3,
-                            }}>{timeAgo(msg.created_at)}</div>
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              justifyContent: isMe ? 'flex-end' : 'flex-start',
+                            }}>
+                              {msg.is_pinned && (
+                                <span style={{ color: '#d97706', fontWeight: 700 }}>📌 Pinned</span>
+                              )}
+                              {timeAgo(msg.created_at)}
+                              {amAdmin && !msg.is_pinned && (
+                                <button onClick={() => pinMessage(msg, true)} title="Pin as announcement" style={{
+                                  border: 'none', background: 'transparent', color: C.ink3,
+                                  cursor: 'pointer', padding: 0, fontSize: 11, fontWeight: 600,
+                                }}>Pin</button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );

@@ -37,6 +37,21 @@ export default function Events() {
     finally { setLoading(false); }
   }
 
+  async function toggleRsvp(id) {
+    setEvents(prev => prev.map(ev => ev.id === id
+      ? { ...ev, my_rsvp: !ev.my_rsvp, rsvp_count: (ev.rsvp_count || 0) + (ev.my_rsvp ? -1 : 1) }
+      : ev));
+    // Keep the open modal in sync if it's this event.
+    setOpenModal(m => (m && m.id === id)
+      ? { ...m, my_rsvp: !m.my_rsvp, rsvp_count: (m.rsvp_count || 0) + (m.my_rsvp ? -1 : 1) } : m);
+    try { await pb.post(`/events/${id}/rsvp`, {}); }
+    catch {
+      setEvents(prev => prev.map(ev => ev.id === id
+        ? { ...ev, my_rsvp: !ev.my_rsvp, rsvp_count: (ev.rsvp_count || 0) + (ev.my_rsvp ? -1 : 1) }
+        : ev));
+    }
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     const form      = e.target;
@@ -118,12 +133,12 @@ export default function Events() {
               <p>{viewMode === 'past' ? 'No past events to show.' : 'No upcoming events.'}</p>
             </div>
           ) : events.map((e) => (
-            <EventCard key={e.id} e={e} viewMode={viewMode} onClick={() => setOpenModal(e)} />
+            <EventCard key={e.id} e={e} viewMode={viewMode} onClick={() => setOpenModal(e)} onRsvp={toggleRsvp} />
           ))}
         </div>
       </div>
 
-      {openModal  && <EventModal event={openModal} onClose={() => setOpenModal(null)} />}
+      {openModal  && <EventModal event={openModal} onClose={() => setOpenModal(null)} onRsvp={toggleRsvp} />}
       {showCreate && (
         <CreateEventModal
           creating={creating}
@@ -216,7 +231,7 @@ function ViewToggle({ mode, onChange }) {
   );
 }
 
-function EventCard({ e, viewMode, onClick }) {
+function EventCard({ e, viewMode, onClick, onRsvp }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const d        = new Date(e.event_date);
@@ -283,6 +298,29 @@ function EventCard({ e, viewMode, onClick }) {
             <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>by {e.organizer_name}</span>
           </div>
         </div>
+
+        {!isPast && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14,
+                        paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+            <button
+              onClick={(ev) => { ev.stopPropagation(); onRsvp(e.id); }}
+              style={{
+                flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '8px 12px', borderRadius: 9, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
+                border: `1.5px solid ${e.my_rsvp ? 'var(--mint-ink, #059669)' : 'var(--line)'}`,
+                background: e.my_rsvp ? 'var(--mint, #d1fae5)' : 'transparent',
+                color: e.my_rsvp ? 'var(--mint-ink, #059669)' : 'var(--ink-2)',
+              }}>
+              {e.my_rsvp ? (
+                <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Going</>
+              ) : ("I'm going")}
+            </button>
+            <span style={{ fontSize: 12.5, color: 'var(--ink-3)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+              {e.rsvp_count || 0} going
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -338,9 +376,10 @@ function ClockIcon() {
   );
 }
 
-function EventModal({ event, onClose }) {
+function EventModal({ event, onClose, onRsvp }) {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const isPast = new Date(event.event_date) < new Date(new Date().toDateString());
   return (
     <div
       style={{
@@ -400,15 +439,29 @@ function EventModal({ event, onClose }) {
               <ClockIcon /> {new Date('1970-01-01T' + event.event_time).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <Avatar name={event.organizer_name} size={26} />
-            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>by {event.organizer_name}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Avatar name={event.organizer_name} size={26} />
+              <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>by {event.organizer_name}</span>
+            </div>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)', fontWeight: 600 }}>{event.rsvp_count || 0} going</span>
           </div>
-          <button onClick={onClose} style={{
-            marginTop: 18, width: '100%', padding: '10px 0',
-            fontSize: 15, fontWeight: 600, background: 'var(--blue)',
-            color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer',
-          }}>Close</button>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            {!isPast && onRsvp && (
+              <button onClick={() => onRsvp(event.id)} style={{
+                flex: 1, padding: '10px 0', fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                border: `1.5px solid ${event.my_rsvp ? 'var(--mint-ink, #059669)' : 'var(--line)'}`,
+                background: event.my_rsvp ? 'var(--mint, #d1fae5)' : 'transparent',
+                color: event.my_rsvp ? 'var(--mint-ink, #059669)' : 'var(--ink-2)',
+                borderRadius: 10,
+              }}>{event.my_rsvp ? '✓ Going' : "I'm going"}</button>
+            )}
+            <button onClick={onClose} style={{
+              flex: 1, padding: '10px 0',
+              fontSize: 15, fontWeight: 600, background: 'var(--blue)',
+              color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer',
+            }}>Close</button>
+          </div>
         </div>
       </div>
     </div>

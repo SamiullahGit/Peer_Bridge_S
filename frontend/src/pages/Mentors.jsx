@@ -17,18 +17,20 @@ export default function Mentors() {
   const [loading, setLoading]     = useState(true);
   const [searchVal, setSearchVal] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [skillFilter, setSkillFilter] = useState('');
   const [requested, setRequested] = useState(new Set());
   const debounceRef = useRef(null);
 
   // Initial load: pull "my requests" first so the badges render correctly,
-  // then load mentors. After mount, react to dept filter changes only.
+  // then load mentors. After mount, react to dept/skill filter changes.
   useEffect(() => { loadMyRequests(); /* eslint-disable-next-line */ }, []);
-  useEffect(() => { loadMentors();    /* eslint-disable-next-line */ }, [deptFilter]);
+  useEffect(() => { loadMentors();    /* eslint-disable-next-line */ }, [deptFilter, skillFilter]);
 
   async function loadMentors() {
     const q = new URLSearchParams();
-    if (searchVal)  q.set('search', searchVal);
-    if (deptFilter) q.set('dept',   deptFilter);
+    if (searchVal)   q.set('search', searchVal);
+    if (deptFilter)  q.set('dept',   deptFilter);
+    if (skillFilter) q.set('skill',  skillFilter);
     setLoading(true);
     try { setMentors(await pb.get('/users/mentors?' + q)); }
     catch { toast('Failed to load mentors'); }
@@ -92,6 +94,23 @@ export default function Mentors() {
                 {DEPTS.map((d) => <option key={d} value={d}>{d || 'All departments'}</option>)}
               </select>
             </div>
+            {skillFilter && (
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--ink-2)' }}>Filtering by skill:</span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 12px', borderRadius: 999,
+                  background: 'var(--blue-soft)', color: 'var(--blue)',
+                  fontSize: 12.5, fontWeight: 700,
+                }}>
+                  {skillFilter}
+                  <button onClick={() => setSkillFilter('')} style={{
+                    border: 'none', background: 'transparent', color: 'var(--blue)',
+                    cursor: 'pointer', fontSize: 15, lineHeight: 1, padding: 0,
+                  }}>×</button>
+                </span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -113,6 +132,7 @@ export default function Mentors() {
               onProfile={() => navigate(`/profile?id=${m.id}`)}
               onMessage={() => navigate(`/messages?to=${m.id}&name=${encodeURIComponent(m.name)}`)}
               onConnect={() => requestMentorship(m.id, m.name)}
+              onSkill={(s) => setSkillFilter(s)}
             />
           ))}
         </div>
@@ -121,8 +141,9 @@ export default function Mentors() {
   );
 }
 
-function MentorCard({ m, isRequested, onProfile, onMessage, onConnect }) {
+function MentorCard({ m, isRequested, onProfile, onMessage, onConnect, onSkill }) {
   const isVerified = (m.rating || 0) >= 4 && (m.rating_count || 0) >= 10;
+  const skills = Array.isArray(m.skills) ? m.skills : [];
 
   return (
     <article
@@ -166,6 +187,20 @@ function MentorCard({ m, isRequested, onProfile, onMessage, onConnect }) {
       }}>
         {m.bio || 'Available to help with academics, career decisions, and finding the right next step.'}
       </p>
+
+      {skills.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {skills.slice(0, 5).map((s) => (
+            <button key={s}
+              onClick={(e) => { e.stopPropagation(); onSkill(s); }}
+              style={{
+                padding: '3px 9px', borderRadius: 999, cursor: 'pointer',
+                border: '1px solid var(--blue-mid)', background: 'var(--blue-soft)',
+                color: 'var(--blue)', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+              }}>{s}</button>
+          ))}
+        </div>
+      )}
 
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',

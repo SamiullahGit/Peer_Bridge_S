@@ -59,6 +59,7 @@ export default function Profile() {
       setEdit({
         name: p.name, dept: p.department || '', bio: p.bio || '',
         year: p.graduation_year || '', role: p.role,
+        skills: Array.isArray(p.skills) ? p.skills : [],
       });
     } catch {
       toast('Failed to load profile');
@@ -73,6 +74,7 @@ export default function Profile() {
         graduation_year: edit.year || null,
         bio            : edit.bio,
         role           : edit.role,
+        skills         : edit.skills || [],
       });
       setAuth(token, { ...me, ...updated });
       setProfile((prev) => ({ ...prev, ...updated }));
@@ -288,6 +290,17 @@ function ViewHeader({ p, isSelf, isMentor, onEdit, onMessage, onRate, onReport, 
         {p.bio
           ? <p style={{ margin: 0, fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.55, maxWidth: 500 }}>{p.bio}</p>
           : <p style={{ margin: 0, fontSize: 13, color: 'var(--ink-3)', fontStyle: 'italic' }}>No bio yet.</p>}
+        {Array.isArray(p.skills) && p.skills.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12, maxWidth: 500 }}>
+            {p.skills.map((s) => (
+              <span key={s} style={{
+                padding: '4px 11px', borderRadius: 999,
+                background: 'var(--blue-soft)', color: 'var(--blue)',
+                fontSize: 12, fontWeight: 600,
+              }}>{s}</span>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {isSelf ? (
@@ -355,6 +368,10 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
         onChange={(e) => setEdit((p) => ({ ...p, bio: e.target.value }))}
         style={{ resize: 'vertical' }}
       />
+      <SkillsEditor
+        skills={edit.skills || []}
+        onChange={(skills) => setEdit((p) => ({ ...p, skills }))}
+      />
       <div className="stack-actions">
         <button className="btn btn-primary" onClick={onSave} style={{ padding: '10px 18px' }}>Save</button>
         <button className="btn btn-ghost"   onClick={onCancel} style={{ padding: '10px 18px' }}>Cancel</button>
@@ -362,6 +379,58 @@ function EditForm({ edit, setEdit, onSave, onCancel, onDelete }) {
                 style={{ padding: '10px 18px', color: 'var(--blush-ink)', borderColor: 'rgba(248,113,113,.35)', marginLeft: 'auto' }}>
           Delete account
         </button>
+      </div>
+    </div>
+  );
+}
+
+function SkillsEditor({ skills, onChange }) {
+  const [draft, setDraft] = useState('');
+  function add() {
+    const v = draft.trim();
+    if (!v) return;
+    if (skills.length >= 12) return;
+    if (skills.some(s => s.toLowerCase() === v.toLowerCase())) { setDraft(''); return; }
+    onChange([...skills, v.slice(0, 30)]);
+    setDraft('');
+  }
+  return (
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase',
+                    letterSpacing: '.05em', marginBottom: 7 }}>
+        Skills &amp; expertise
+      </div>
+      {skills.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {skills.map((s) => (
+            <span key={s} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '4px 10px', borderRadius: 999,
+              background: 'var(--blue-soft)', color: 'var(--blue)',
+              fontSize: 12, fontWeight: 600,
+            }}>
+              {s}
+              <button onClick={() => onChange(skills.filter(x => x !== s))} style={{
+                border: 'none', background: 'transparent', color: 'var(--blue)',
+                cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0,
+              }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          className="input" value={draft}
+          placeholder="e.g. PyTorch, DSA, System Design"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+          style={{ flex: 1, padding: '9px 12px', fontSize: 13.5 }}
+        />
+        <button className="btn btn-ghost" onClick={add} disabled={!draft.trim() || skills.length >= 12}
+                style={{ padding: '9px 16px' }}>Add</button>
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4 }}>
+        Up to 12 tags. Shown on your profile and used in mentor search.
       </div>
     </div>
   );
