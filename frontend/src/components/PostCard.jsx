@@ -426,7 +426,8 @@ export default function PostCard({
                                  borderRadius: 100, background: 'var(--blue-soft)', color: 'var(--blue)' }}>MENTOR</span>
                 )}
               </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}
+                   dangerouslySetInnerHTML={{ __html: linkifyHTML(r.text) }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 5 }}>
                 <button
                   onClick={() => likeReply(r)}

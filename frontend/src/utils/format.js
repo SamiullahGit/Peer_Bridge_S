@@ -21,8 +21,12 @@ export function tagPalette(tag) {
 // URL -> <a> string. Used inside dangerouslySetInnerHTML for post bodies.
 export function linkifyHTML(text) {
   if (!text) return '';
-  return text.replace(/(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" target="_blank" rel="noreferrer" style="color:var(--blue);text-decoration:underline">$1</a>');
+  return text
+    .replace(/(https?:\/\/[^\s<]+)/g,
+      '<a href="$1" target="_blank" rel="noreferrer" style="color:var(--blue);text-decoration:underline">$1</a>')
+    // @mentions — only after start or whitespace, so URLs aren't touched.
+    .replace(/(^|\s)@([A-Za-z][A-Za-z0-9_]{1,29})/g,
+      '$1<span style="color:var(--blue);font-weight:600">@$2</span>');
 }
 
 export function formatFileSize(bytes) {
