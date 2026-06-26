@@ -257,6 +257,20 @@ export default function Feed() {
     }
   }
 
+  // Nested reply (reply-to-reply). Returns the created reply for optimistic UI.
+  async function nestedReply(postId, text, parentId) {
+    const t = (text || '').trim();
+    if (!t) return;
+    try {
+      const reply = await pb.post(`/posts/${postId}/replies`, { text: t, parent_id: parentId });
+      setPosts((prev) => prev.map((p) => p.id === postId
+        ? { ...p, replies: [...(p.replies || []), reply], comments_count: (p.comments_count || 0) + 1 }
+        : p));
+    } catch {
+      toast('Failed to post reply');
+    }
+  }
+
   function shareLink(id) {
     navigator.clipboard?.writeText(`${location.origin}/?p=${id}`)
       .then(() => toast('Link copied!'));
@@ -530,6 +544,7 @@ export default function Feed() {
                 onToggleReplies={toggleReplies}
                 onReplyDraftChange={setReplyDraft}
                 onPostReply={postReply}
+                onNestedReply={nestedReply}
                 onMessageAuthor={(id, name) => setChatPeer({ id, name })}
                 onReport={(type, id) => setReportTarget({ type, id })}
                 onShare={shareLink}

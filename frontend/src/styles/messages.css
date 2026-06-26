@@ -129,6 +129,13 @@
   box-shadow: 0 2px 8px rgba(37,99,235,.28);
 }
 .chat-send-btn:hover { background: var(--blue-2); transform: translateY(-1px); }
+.chat-attach-btn {
+  width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+  border: 1.5px solid var(--line); background: transparent; color: var(--ink-3);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.chat-attach-btn:hover { background: var(--blue-soft); color: var(--blue); border-color: var(--blue-mid); }
 
 .chat-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

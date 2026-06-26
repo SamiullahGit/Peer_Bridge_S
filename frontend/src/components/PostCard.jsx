@@ -38,7 +38,7 @@ function metaStr(p) {
 
 export default function PostCard({
   post, me, replies = [], replyDraft = '',
-  onLike, onBookmark, onToggleReplies, onReplyDraftChange, onPostReply,
+  onLike, onBookmark, onToggleReplies, onReplyDraftChange, onPostReply, onNestedReply,
   onMessageAuthor, onReport, onShare, onProfileClick,
   onDelete, onUpdate,
   repliesOpen,
@@ -59,6 +59,10 @@ export default function PostCard({
 
   // Reply likes (replyId -> liked bool, seeded false; counts tracked too).
   const [replyLikes, setReplyLikes]   = useState({});
+
+  // Nested replies: which reply we're replying to + its draft text.
+  const [replyingTo, setReplyingTo]   = useState(null);
+  const [nestedDraft, setNestedDraft] = useState('');
 
   async function react(key) {
     setReactOpen(false);
@@ -356,25 +360,35 @@ export default function PostCard({
         </button>
       </div>
 
-      {repliesOpen && (
-        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1.5px dashed var(--line)' }}>
-          {replies.map((r) => (
-            <div key={r.id} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-              <Avatar name={r.author_name} size={30} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, flexWrap: 'wrap' }}>
-                  <strong style={{ color: 'var(--ink)' }}>{r.author_name}</strong>
-                  <span style={{ color: 'var(--ink-3)' }}>· {roleLabel(r.author_role)} · {timeAgo(r.created_at)}</span>
-                  {r.author_role === 'mentor' && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px',
-                                   borderRadius: 100, background: '#EFF6FF', color: '#2563EB' }}>MENTOR</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
+      {repliesOpen && (() => {
+        const topLevel  = replies.filter((r) => !r.parent_id);
+        const childrenOf = (id) => replies.filter((r) => r.parent_id === id);
+
+        function submitNested(parentId) {
+          const t = nestedDraft.trim();
+          if (!t) return;
+          onNestedReply?.(post.id, t, parentId);
+          setNestedDraft(''); setReplyingTo(null);
+        }
+
+        const ReplyRow = ({ r, child }) => (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+            <Avatar name={r.author_name} size={child ? 26 : 30} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, flexWrap: 'wrap' }}>
+                <strong style={{ color: 'var(--ink)' }}>{r.author_name}</strong>
+                <span style={{ color: 'var(--ink-3)' }}>· {roleLabel(r.author_role)} · {timeAgo(r.created_at)}</span>
+                {r.author_role === 'mentor' && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                                 borderRadius: 100, background: 'var(--blue-soft)', color: 'var(--blue)' }}>MENTOR</span>
+                )}
+              </div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 5 }}>
                 <button
                   onClick={() => likeReply(r)}
                   style={{
-                    marginTop: 5, display: 'inline-flex', alignItems: 'center', gap: 5,
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
                     border: 'none', background: 'transparent', cursor: 'pointer',
                     fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
                     color: (replyLikes[r.id]?.liked) ? '#DC2626' : 'var(--ink-3)', padding: 0,
@@ -386,28 +400,67 @@ export default function PostCard({
                   </svg>
                   {(replyLikes[r.id]?.count ?? r.likes_count ?? 0) || ''} Like
                 </button>
+                {!child && (
+                  <button
+                    onClick={() => { setReplyingTo(replyingTo === r.id ? null : r.id); setNestedDraft(''); }}
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer',
+                             fontFamily: 'inherit', fontSize: 12, fontWeight: 600, color: 'var(--ink-3)', padding: 0 }}>
+                    Reply
+                  </button>
+                )}
               </div>
-            </div>
-          ))}
 
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-            <Avatar name={me?.name || '?'} size={30} />
-            <input
-              className="reply-input" value={replyDraft}
-              placeholder="Write a helpful reply…"
-              onChange={(e) => onReplyDraftChange(post.id, e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && onPostReply(post.id)}
-            />
-            <button className="send-btn" onClick={() => onPostReply(post.id)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                   stroke="white" strokeWidth="2" strokeLinecap="round">
-                <path d="M22 2 11 13" />
-                <path d="M22 2 15 22l-4-9-9-4 20-7z" />
-              </svg>
-            </button>
+              {/* Children of this reply */}
+              {!child && childrenOf(r.id).length > 0 && (
+                <div style={{ marginTop: 10, paddingLeft: 14, borderLeft: '2px solid var(--line)' }}>
+                  {childrenOf(r.id).map((c) => <ReplyRow key={c.id} r={c} child />)}
+                </div>
+              )}
+
+              {/* Inline reply composer */}
+              {!child && replyingTo === r.id && (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                  <Avatar name={me?.name || '?'} size={26} />
+                  <input
+                    className="reply-input" autoFocus value={nestedDraft}
+                    placeholder={`Reply to ${r.author_name}…`}
+                    onChange={(e) => setNestedDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && submitNested(r.id)}
+                  />
+                  <button className="send-btn" onClick={() => submitNested(r.id)}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round">
+                      <path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+
+        return (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1.5px dashed var(--line)' }}>
+            {topLevel.map((r) => <ReplyRow key={r.id} r={r} />)}
+
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+              <Avatar name={me?.name || '?'} size={30} />
+              <input
+                className="reply-input" value={replyDraft}
+                placeholder="Write a helpful reply…"
+                onChange={(e) => onReplyDraftChange(post.id, e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && onPostReply(post.id)}
+              />
+              <button className="send-btn" onClick={() => onPostReply(post.id)}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                     stroke="white" strokeWidth="2" strokeLinecap="round">
+                  <path d="M22 2 11 13" />
+                  <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

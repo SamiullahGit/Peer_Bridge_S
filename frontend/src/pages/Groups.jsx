@@ -9,6 +9,7 @@ import { timeAgo }                 from '../utils/time.js';
 import { toast }             from '../components/Toast.jsx';
 import ToastHost             from '../components/Toast.jsx';
 import Sidebar               from '../components/Sidebar.jsx';
+import { Attachment, VoiceRecorder } from './Messages.jsx';
 
 import '../styles/messages.css';
 
@@ -104,9 +105,11 @@ export default function Groups() {
   const [members,       setMembers]       = useState([]);
   const [membersLoading,setMembersLoading]= useState(false);
 
+  const [attach, setAttach] = useState(null);   // { file, kind }
   const messagesEndRef = useRef(null);
   const pollRef        = useRef(null);
   const inputRef       = useRef(null);
+  const groupFileRef   = useRef(null);
 
   /* ── Data ─────────────────────────────────────────────────────────── */
   useEffect(() => { loadGroups(); }, []);
@@ -186,13 +189,31 @@ export default function Groups() {
   async function sendMessage(e) {
     e?.preventDefault();
     const text = draft.trim();
-    if (!text || !activeGroup) return;
+    if ((!text && !attach) || !activeGroup) return;
     setSending(true); setDraft('');
+    const sending = attach; setAttach(null);
     try {
-      const msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text });
+      let msg;
+      if (sending) {
+        const fd = new FormData();
+        if (text) fd.append('text', text);
+        fd.append('attachment', sending.file, sending.file.name);
+        msg = await pb.upload(`/groups/${activeGroup.id}/messages`, fd);
+      } else {
+        msg = await pb.post(`/groups/${activeGroup.id}/messages`, { text });
+      }
       setMessages(prev => [...prev, msg]);
-    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); }
+    } catch (err) { toast(err.message || 'Failed to send'); setDraft(text); setAttach(sending); }
     finally { setSending(false); inputRef.current?.focus(); }
+  }
+
+  function onPickGroupFile(e) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 15 * 1024 * 1024) { toast('File must be under 15 MB'); return; }
+    const kind = f.type.startsWith('image/') ? 'image' : f.type.startsWith('audio/') ? 'audio' : 'file';
+    setAttach({ file: f, kind });
+    e.target.value = '';
   }
 
   async function kickMember(userId) {
@@ -563,14 +584,17 @@ export default function Groups() {
                               </div>
                             )}
                             <div style={{
-                              padding: '7px 11px',
+                              padding: msg.attachment_type === 'image' ? 6 : '7px 11px',
                               borderRadius: isMe ? '12px 12px 3px 12px' : '12px 12px 12px 3px',
                               background: isMe ? C.blue : C.bubble,
                               color: isMe ? 'white' : C.ink,
                               fontSize: 13.5, lineHeight: 1.5,
                               border: isMe ? 'none' : `1px solid ${C.bubbleBorder}`,
                               wordBreak: 'break-word',
-                            }}>{msg.text}</div>
+                            }}>
+                              {msg.attachment_url && <Attachment m={msg} />}
+                              {msg.text}
+                            </div>
                             <div style={{
                               fontSize: 9.5, color: C.ink3, marginTop: 2,
                               textAlign: isMe ? 'right' : 'left', paddingInline: 3,
@@ -602,7 +626,33 @@ export default function Groups() {
                   borderTop: `1px solid ${C.line}`,
                   background: C.card, flexShrink: 0,
                 }}>
-                  <form onSubmit={sendMessage} style={{ display: 'flex', gap: 7 }}>
+                  {attach && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7,
+                      padding: '7px 11px', borderRadius: 9,
+                      background: C.blueSoft, border: `1px solid ${C.blue}33`, fontSize: 12.5,
+                    }}>
+                      <span style={{ fontSize: 15 }}>{attach.kind === 'image' ? '🖼️' : attach.kind === 'audio' ? '🎙️' : '📎'}</span>
+                      <span style={{ flex: 1, minWidth: 0, color: C.ink, fontWeight: 600,
+                                     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{attach.file.name}</span>
+                      <button type="button" onClick={() => setAttach(null)} style={{
+                        border: 'none', background: 'transparent', color: C.ink3, cursor: 'pointer', fontSize: 16,
+                      }}>×</button>
+                    </div>
+                  )}
+                  <form onSubmit={sendMessage} style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                    <input ref={groupFileRef} type="file" style={{ display: 'none' }}
+                           accept="image/*,audio/*,.pdf,.doc,.docx,.zip,.txt" onChange={onPickGroupFile} />
+                    <button type="button" onClick={() => groupFileRef.current?.click()} title="Attach a file" style={{
+                      width: 36, height: 36, borderRadius: 9, flexShrink: 0, cursor: 'pointer',
+                      border: `1.5px solid ${C.line}`, background: 'transparent', color: C.ink3,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                      </svg>
+                    </button>
+                    <VoiceRecorder onRecorded={(file) => setAttach({ file, kind: 'audio' })} />
                     <input
                       ref={inputRef}
                       value={draft}
@@ -616,12 +666,12 @@ export default function Groups() {
                         fontFamily: 'inherit', fontSize: 13.5, outline: 'none',
                       }}
                     />
-                    <button type="submit" disabled={!draft.trim() || sending} style={{
+                    <button type="submit" disabled={(!draft.trim() && !attach) || sending} style={{
                       padding: '9px 15px', borderRadius: 9, border: 'none', flexShrink: 0,
-                      background: draft.trim() ? C.blue : C.line,
-                      color: draft.trim() ? 'white' : C.ink3,
+                      background: (draft.trim() || attach) ? C.blue : C.line,
+                      color: (draft.trim() || attach) ? 'white' : C.ink3,
                       fontFamily: 'inherit', fontSize: 13, fontWeight: 700,
-                      cursor: draft.trim() ? 'pointer' : 'default',
+                      cursor: (draft.trim() || attach) ? 'pointer' : 'default',
                       transition: 'background .15s',
                     }}>{sending ? '…' : 'Send'}</button>
                   </form>
