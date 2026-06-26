@@ -17,6 +17,7 @@ import Profile   from './pages/Profile.jsx';
 import Saved     from './pages/Saved.jsx';
 import Groups    from './pages/Groups.jsx';
 import Leaderboard from './pages/Leaderboard.jsx';
+import Admin       from './pages/Admin.jsx';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/saved"     element={<RequireAuth><Saved /></RequireAuth>} />
           <Route path="/groups"    element={<RequireAuth><Groups /></RequireAuth>} />
           <Route path="/leaderboard" element={<RequireAuth><Leaderboard /></RequireAuth>} />
+          <Route path="/admin"     element={<RequireAuth><Admin /></RequireAuth>} />
 
           {/* Legacy URLs from the vanilla version. */}
           <Route path="/feed.html"      element={<Navigate to="/feed"      replace />} />

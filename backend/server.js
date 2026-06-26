@@ -53,6 +53,7 @@ app.use('/api/search',       require('./routes/search'));
 app.use('/api/collections',  require('./routes/collections'));
 app.use('/api/ai',           require('./routes/ai'));
 app.use('/api/leaderboard',  require('./routes/leaderboard'));
+app.use('/api/admin',        require('./routes/admin'));
 
 // Health-check endpoint (handy when wiring up the React dev proxy).
 app.get('/api/health', (_req, res) => res.json({ ok: true }));

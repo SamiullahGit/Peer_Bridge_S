@@ -233,6 +233,14 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
           </NavIcon>
           <span>My Profile</span>
         </Link>
+        {user?.role === 'admin' && (
+          <Link to="/admin" className={`snav-item${active === 'admin' ? ' active' : ''}`} onClick={closeMobileNav}>
+            <NavIcon>
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </NavIcon>
+            <span>Admin</span>
+          </Link>
+        )}
 
         <div className="snav-footer">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
