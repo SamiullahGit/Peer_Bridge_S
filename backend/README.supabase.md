@@ -45,7 +45,8 @@ All are safe to re-run.
 | 1 | [`sql/0001_init.sql`](sql/0001_init.sql) | 15 tables, indexes, `updated_at` triggers, and 2 helper functions: `adjust_counter` (atomic counter `$inc` replacement) and `get_conversations` (inbox). | choose **Run without RLS** if prompted |
 | 2 | [`sql/0002_enable_rls.sql`](sql/0002_enable_rls.sql) | Enables Row Level Security on every table (no policies). | normal Run |
 | 3 | [`sql/0003_harden_functions.sql`](sql/0003_harden_functions.sql) | Pins each function's `search_path` and locks the `SECURITY DEFINER` functions to the backend only. | normal Run |
-| 4 | [`sql/0004_get_feed.sql`](sql/0004_get_feed.sql) | Adds `get_feed()` — the single-query home-feed used by `GET /api/posts`. | normal Run |
+| 4 | [`sql/0005_follows.sql`](sql/0005_follows.sql) | Adds the `follows` table + `followers_count`/`following_count` counters. | normal Run |
+| 5 | [`sql/0006_features.sql`](sql/0006_features.sql) | Reactions, notifications, polls, profile skills, resource upvotes, event RSVP, group pins, reply likes — and defines `get_feed()` (the single-query home-feed used by `GET /api/posts`). | normal Run |
 
 Each should report **“Success. No rows returned.”** Confirm in **Table Editor**
 that `users`, `posts`, `messages`, … exist (empty until you seed).
@@ -54,7 +55,7 @@ that `users`, `posts`, `messages`, … exist (empty until you seed).
 > boundary: it does its own JWT auth and connects with the **`service_role`
 > (secret) key**, which *bypasses RLS and the EXECUTE grants*. So the app
 > works identically while the public `anon` key can't read tables or call the
-> helper functions directly. Files 0002–0004 exist to make the **Security
+> helper functions directly. Files 0002–0003 exist to make the **Security
 > Advisor clean for a public deployment**; for a purely local demo, file
 > 0001 alone is enough to run the app. **Never expose the service-role key to
 > the browser.**
@@ -150,7 +151,7 @@ round-trip**, with identical responses:
 
 - **`GET /api/posts` (home feed):** used to make 2 round-trips (posts, then
   the viewer's likes/bookmarks). Now a single `get_feed()` call
-  ([`sql/0004_get_feed.sql`](sql/0004_get_feed.sql)) computes the
+  ([`sql/0006_features.sql`](sql/0006_features.sql)) computes the
   `liked`/`bookmarked` flags server-side. ~0.40s → ~0.20s.
 - **`GET /api/users/:id` (profile):** its user + recent-posts queries now run
   in parallel (`Promise.all`) instead of sequentially. No SQL change.

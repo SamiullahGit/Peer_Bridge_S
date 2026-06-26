@@ -94,6 +94,10 @@ create table if not exists reply_likes (
 -- Re-creatable; returns the same columns plus my_reaction, reactions_count,
 -- has_poll. Backwards-compatible with the route.
 -- ════════════════════════════════════════════════════════════════════
+-- Drop first: create-or-replace cannot change the return columns of an
+-- existing function (Postgres error 42P13).
+drop function if exists get_feed(uuid, text, text, int, int);
+
 create or replace function get_feed(
   viewer    uuid,
   p_tag     text,

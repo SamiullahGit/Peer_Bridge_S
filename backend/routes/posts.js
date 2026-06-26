@@ -54,7 +54,7 @@ router.get('/', auth, async (req, res) => {
     const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
     // Single round-trip: posts + the viewer's liked/bookmarked flags,
-    // computed server-side in get_feed() (see sql/0004_get_feed.sql).
+    // computed server-side in get_feed() (see sql/0006_features.sql).
     const { data, error } = await supabase.rpc('get_feed', {
       viewer  : req.user.id,
       p_tag   : (tag && tag !== 'For you') ? likeTerm(tag) : null,
