@@ -181,10 +181,13 @@ export default function BabaAssistant() {
         {open ? (
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
         ) : (
-          // Clean "AI sparkle" mark — professional, on-brand.
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 3l1.7 4.5L18 9l-4.3 1.5L12 15l-1.7-4.5L6 9l4.3-1.5L12 3z" fill="#fff" stroke="none" />
-            <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="#fff" stroke="none" opacity=".9" />
+          // Clean chat bubble with typing dots — instantly reads as "ask / chat".
+          <svg width="27" height="27" viewBox="0 0 24 24" fill="none">
+            <path d="M5 4h14a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-7.2l-4.3 3.1a.6.6 0 0 1-1-.5V17H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"
+                  fill="#fff" />
+            <circle cx="8.5"  cy="10.5" r="1.25" fill="#6D28D9" />
+            <circle cx="12"   cy="10.5" r="1.25" fill="#6D28D9" />
+            <circle cx="15.5" cy="10.5" r="1.25" fill="#6D28D9" />
           </svg>
         )}
       </button>
