@@ -72,7 +72,9 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`\n  Peer Bridge backend running at http://localhost:${PORT}`);
     console.log(`  NODE_ENV = ${process.env.NODE_ENV || 'development'}`);
-    console.log(`  Ask Baba (OpenRouter): ${process.env.OPENROUTER_API_KEY ? 'enabled' : 'NOT configured'}\n`);
+    const aiProvider = process.env.GROQ_API_KEY ? 'Groq'
+      : process.env.OPENROUTER_API_KEY ? 'OpenRouter' : null;
+    console.log(`  Ask Baba: ${aiProvider ? `enabled via ${aiProvider}` : 'NOT configured'}\n`);
   });
 }
 
