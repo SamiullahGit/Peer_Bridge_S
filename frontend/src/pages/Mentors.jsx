@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate }                  from 'react-router-dom';
 
 import Sidebar    from '../components/Sidebar.jsx';
@@ -74,7 +74,9 @@ export default function Mentors() {
     debounceRef.current = setTimeout(loadMentors, 400);
   }
 
-  async function requestMentorship(id, name) {
+  // Stable callbacks so memoized MentorCards don't all re-render while the user
+  // types in the search / "Find with Baba" boxes.
+  const requestMentorship = useCallback(async (id, name) => {
     try {
       await pb.post(`/users/${id}/request-mentorship`,
         { message: 'Hi! I would love to connect for mentorship.' });
@@ -83,7 +85,10 @@ export default function Mentors() {
     } catch (e) {
       toast(e.message || 'Failed to send request');
     }
-  }
+  }, []);
+
+  const openProfile = useCallback((m) => navigate(`/profile?id=${m.id}`), [navigate]);
+  const openMessage = useCallback((m) => navigate(`/messages?to=${m.id}&name=${encodeURIComponent(m.name)}`), [navigate]);
 
   return (
     <Sidebar active="mentors">
@@ -206,10 +211,10 @@ export default function Mentors() {
               key={m.id}
               m={m}
               status={reqStatus[m.id]}
-              onProfile={() => navigate(`/profile?id=${m.id}`)}
-              onMessage={() => navigate(`/messages?to=${m.id}&name=${encodeURIComponent(m.name)}`)}
-              onConnect={() => requestMentorship(m.id, m.name)}
-              onSkill={(s) => setSkillFilter(s)}
+              onProfile={openProfile}
+              onMessage={openMessage}
+              onConnect={requestMentorship}
+              onSkill={setSkillFilter}
             />
           ))}
         </div>
@@ -218,7 +223,7 @@ export default function Mentors() {
   );
 }
 
-function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
+const MentorCard = memo(function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
   const isVerified = (m.rating || 0) >= 4 && (m.rating_count || 0) >= 10;
   const skills = Array.isArray(m.skills) ? m.skills : [];
 
@@ -227,7 +232,7 @@ function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
       className="card fade-up"
       style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: 22,
                borderRadius: 24, cursor: 'pointer' }}
-      onClick={onProfile}
+      onClick={() => onProfile(m)}
     >
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
         <Avatar name={m.name} size={56} imgUrl={m.profile_image || ''} shape="square" online={m.is_online} />
@@ -289,7 +294,7 @@ function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
             className="chip-btn" style={{ fontSize: 12, padding: '6px 10px' }}
-            onClick={(e) => { e.stopPropagation(); onMessage(); }}
+            onClick={(e) => { e.stopPropagation(); onMessage(m); }}
           >Message</button>
           {status === 'accepted' ? (
             <button className="btn btn-ghost" disabled
@@ -306,14 +311,14 @@ function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
           ) : (
             <button
               className="btn btn-primary" style={{ fontSize: 12, padding: '8px 12px' }}
-              onClick={(e) => { e.stopPropagation(); onConnect(); }}
+              onClick={(e) => { e.stopPropagation(); onConnect(m.id, m.name); }}
             >Connect</button>
           )}
         </div>
       </div>
     </article>
   );
-}
+});
 
 function Stars({ rating }) {
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 import Avatar              from './Avatar.jsx';
 import { pb }              from '../api/client.js';
@@ -36,7 +36,7 @@ function metaStr(p) {
   return [role, dept + (year ? ' ' + year : '')].filter(Boolean).join(' · ');
 }
 
-export default function PostCard({
+function PostCard({
   post, me, replies = [], replyDraft = '',
   onLike, onBookmark, onToggleReplies, onReplyDraftChange, onPostReply, onNestedReply,
   onMessageAuthor, onReport, onShare, onProfileClick,
@@ -587,3 +587,8 @@ function PollBlock({ postId }) {
     </div>
   );
 }
+
+// Memoized: with the Feed passing stable callbacks, an unchanged post no longer
+// re-renders when unrelated Feed state changes (sidebar toggle, modals, typing
+// in another card's reply box) — the main fix for the click-handler INP spikes.
+export default memo(PostCard);
