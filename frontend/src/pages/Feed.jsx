@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate }            from 'react-router-dom';
+
+// Stable empty array so memoized PostCards don't see a new `replies` prop each
+// render when a post has no replies yet.
+const EMPTY_REPLIES = [];
 
 import { pb }            from '../api/client.js';
 import { useAuth }       from '../context/AuthContext.jsx';
@@ -17,6 +21,7 @@ import ComposerModal     from '../components/ComposerModal.jsx';
 import ChatOverlay       from '../components/ChatOverlay.jsx';
 import ReportModal       from '../components/ReportModal.jsx';
 import RequestsModal     from '../components/RequestsModal.jsx';
+import ShareSheet        from '../components/ShareSheet.jsx';
 import ToastHost         from '../components/Toast.jsx';
 
 import '../styles/feed.css';
@@ -77,6 +82,14 @@ export default function Feed() {
   const [openReplies, setOpenReplies] = useState({});   // postId -> true
   const [replyDrafts, setReplyDrafts] = useState({});
 
+  // Live refs of mutable state, so the per-post callbacks below can stay
+  // referentially stable (empty deps) and not re-render the whole list when
+  // posts/drafts/openReplies change. This is what keeps a sidebar toggle (or
+  // typing in one reply box) from re-rendering every PostCard.
+  const postsRef       = useRef(posts);       postsRef.current = posts;
+  const draftsRef      = useRef(replyDrafts);  draftsRef.current = replyDrafts;
+  const openRepliesRef = useRef(openReplies);  openRepliesRef.current = openReplies;
+
   // Modals
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerTag,  setComposerTag]  = useState('Academic Help');
@@ -84,6 +97,7 @@ export default function Feed() {
   const [chatPeer,     setChatPeer]     = useState(null);
   const [reportTarget, setReportTarget] = useState(null);   // { type, id }
   const [requestsOpen, setRequestsOpen] = useState(false);
+  const [shareItem,    setShareItem]    = useState(null);   // { url, title }
 
   // Mentor requests (for the sidebar badge)
   const [requests, setRequests] = useState([]);
@@ -181,16 +195,19 @@ export default function Feed() {
   // ── Filtering + sorting ───────────────────────────────────────────
   const SORT_LABELS = { recent: 'Recent', liked: 'Most liked', discussed: 'Most discussed' };
 
-  const base =
-    filter === 'For you'   ? posts :
-    filter === 'Following' ? posts.filter((p) => followingIds.has(p.author_id)) :
-    posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()));
-
-  const filteredPosts = base.slice().sort((a, b) => {
-    if (sortBy === 'liked')     return (b.likes_count    || 0) - (a.likes_count    || 0);
-    if (sortBy === 'discussed') return (b.comments_count || 0) - (a.comments_count || 0);
-    return new Date(b.created_at) - new Date(a.created_at);   // recent
-  });
+  // Only recompute the visible list when its real inputs change — not on every
+  // render (e.g. a sidebar toggle or modal open).
+  const filteredPosts = useMemo(() => {
+    const base =
+      filter === 'For you'   ? posts :
+      filter === 'Following' ? posts.filter((p) => followingIds.has(p.author_id)) :
+      posts.filter((p) => (p.tag || '').toLowerCase().includes(filter.toLowerCase()));
+    return base.slice().sort((a, b) => {
+      if (sortBy === 'liked')     return (b.likes_count    || 0) - (a.likes_count    || 0);
+      if (sortBy === 'discussed') return (b.comments_count || 0) - (a.comments_count || 0);
+      return new Date(b.created_at) - new Date(a.created_at);   // recent
+    });
+  }, [posts, filter, followingIds, sortBy]);
 
   // ── Action handlers ───────────────────────────────────────────────
   function debounceSearch(val) {
@@ -216,16 +233,18 @@ export default function Feed() {
     }, 350);
   }
 
-  async function deletePost(id) {
+  // These are passed down to every (memoized) PostCard, so they must keep a
+  // stable identity — hence useCallback with empty deps + refs for live reads.
+  const deletePost = useCallback(async (id) => {
     try {
       await pb.del(`/posts/${id}`);
       setPosts((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
       toast(e.message || 'Failed to delete post');
     }
-  }
+  }, []);
 
-  async function updatePost(id, fields) {
+  const updatePost = useCallback(async (id, fields) => {
     try {
       const updated = await pb.patch(`/posts/${id}`, fields);
       setPosts((prev) => prev.map((p) => p.id === id ? { ...p, ...updated } : p));
@@ -233,33 +252,33 @@ export default function Feed() {
       toast(e.message || 'Failed to update post');
       throw e;
     }
-  }
+  }, []);
 
-  async function toggleLike(id) {
+  const toggleLike = useCallback(async (id) => {
     setPosts((prev) => prev.map((p) => p.id === id
       ? { ...p, liked: !p.liked, likes_count: p.likes_count + (p.liked ? -1 : 1) }
       : p));
     try { await pb.post(`/posts/${id}/like`); }
     catch { setPosts((prev) => prev.map((p) => p.id === id
       ? { ...p, liked: !p.liked, likes_count: p.likes_count + (p.liked ? -1 : 1) } : p)); }
-  }
+  }, []);
 
-  async function toggleBookmark(id) {
+  const toggleBookmark = useCallback(async (id) => {
     setPosts((prev) => prev.map((p) => p.id === id
       ? { ...p, bookmarked: !p.bookmarked, bookmarks_count: (p.bookmarks_count || 0) + (p.bookmarked ? -1 : 1) }
       : p));
     try { await pb.post(`/posts/${id}/bookmark`); }
     catch { setPosts((prev) => prev.map((p) => p.id === id
       ? { ...p, bookmarked: !p.bookmarked, bookmarks_count: (p.bookmarks_count || 0) + (p.bookmarked ? -1 : 1) } : p)); }
-  }
+  }, []);
 
-  async function toggleReplies(id) {
-    const wasOpen = !!openReplies[id];
+  const toggleReplies = useCallback(async (id) => {
+    const wasOpen = !!openRepliesRef.current[id];
     setOpenReplies((prev) => ({ ...prev, [id]: !wasOpen }));
 
     // Lazy-load replies the first time the user expands a thread.
     if (!wasOpen) {
-      const post = posts.find((p) => p.id === id);
+      const post = postsRef.current.find((p) => p.id === id);
       if (post && !post.replies) {
         try {
           const replies = await pb.get(`/posts/${id}/replies`);
@@ -267,28 +286,28 @@ export default function Feed() {
         } catch { /* silent */ }
       }
     }
-  }
+  }, []);
 
-  function setReplyDraft(id, val) {
+  const setReplyDraft = useCallback((id, val) => {
     setReplyDrafts((prev) => ({ ...prev, [id]: val }));
-  }
+  }, []);
 
-  async function postReply(postId) {
-    const text = (replyDrafts[postId] || '').trim();
+  const postReply = useCallback(async (postId) => {
+    const text = (draftsRef.current[postId] || '').trim();
     if (!text) return;
     try {
       const reply = await pb.post(`/posts/${postId}/replies`, { text });
       setPosts((prev) => prev.map((p) => p.id === postId
         ? { ...p, replies: [...(p.replies || []), reply], comments_count: (p.comments_count || 0) + 1 }
         : p));
-      setReplyDraft(postId, '');
+      setReplyDrafts((prev) => ({ ...prev, [postId]: '' }));
     } catch {
       toast('Failed to post reply');
     }
-  }
+  }, []);
 
   // Nested reply (reply-to-reply). Returns the created reply for optimistic UI.
-  async function nestedReply(postId, text, parentId) {
+  const nestedReply = useCallback(async (postId, text, parentId) => {
     const t = (text || '').trim();
     if (!t) return;
     try {
@@ -299,12 +318,17 @@ export default function Feed() {
     } catch {
       toast('Failed to post reply');
     }
-  }
+  }, []);
 
-  function shareLink(id) {
-    navigator.clipboard?.writeText(`${location.origin}/?p=${id}`)
-      .then(() => toast('Link copied!'));
-  }
+  const shareLink = useCallback((id) => {
+    const post = postsRef.current.find((p) => p.id === id);
+    setShareItem({ url: `${location.origin}/?p=${id}`, title: post?.title || '' });
+  }, []);
+
+  // Stable per-post callbacks for the inline handlers PostCard expects.
+  const onMessageAuthor = useCallback((id, name) => setChatPeer({ id, name }), []);
+  const onReportTarget  = useCallback((type, id) => setReportTarget({ type, id }), []);
+  const onProfileClick  = useCallback((id) => navigate(`/profile?id=${id}`), [navigate]);
 
   function openComposer(tag, anon = false) {
     setComposerTag(tag || 'Academic Help');
@@ -551,7 +575,7 @@ export default function Feed() {
                 key={p.id}
                 post={p}
                 me={me}
-                replies={p.replies || []}
+                replies={p.replies || EMPTY_REPLIES}
                 replyDraft={replyDrafts[p.id] || ''}
                 repliesOpen={!!openReplies[p.id]}
                 onLike={toggleLike}
@@ -560,10 +584,10 @@ export default function Feed() {
                 onReplyDraftChange={setReplyDraft}
                 onPostReply={postReply}
                 onNestedReply={nestedReply}
-                onMessageAuthor={(id, name) => setChatPeer({ id, name })}
-                onReport={(type, id) => setReportTarget({ type, id })}
+                onMessageAuthor={onMessageAuthor}
+                onReport={onReportTarget}
                 onShare={shareLink}
-                onProfileClick={(id) => navigate(`/profile?id=${id}`)}
+                onProfileClick={onProfileClick}
                 onDelete={deletePost}
                 onUpdate={updatePost}
               />
@@ -690,6 +714,14 @@ export default function Feed() {
           requests={requests}
           onRespond={respondRequest}
           onClose={() => setRequestsOpen(false)}
+        />
+      )}
+
+      {shareItem && (
+        <ShareSheet
+          url={shareItem.url}
+          title={shareItem.title}
+          onClose={() => setShareItem(null)}
         />
       )}
     </div>

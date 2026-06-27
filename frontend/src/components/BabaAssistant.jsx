@@ -24,6 +24,7 @@ export default function BabaAssistant() {
   const [messages, setMessages] = useState([GREETING]);
   const [draft, setDraft]     = useState('');
   const [busy, setBusy]       = useState(false);
+  const [showHint, setShowHint] = useState(false);   // one-time "drag me" tip
   const scrollRef = useRef(null);
   const inputRef  = useRef(null);
 
@@ -88,6 +89,15 @@ export default function BabaAssistant() {
   }, [open]);
   useEffect(() => { scrollToEnd(); }, [messages, busy]);
 
+  // Show a friendly "you can drag me" tip once per sign-in session.
+  useEffect(() => {
+    if (!user || sessionStorage.getItem('pb_baba_hint')) return;
+    sessionStorage.setItem('pb_baba_hint', '1');
+    const show = setTimeout(() => setShowHint(true), 1000);
+    const hide = setTimeout(() => setShowHint(false), 9000);
+    return () => { clearTimeout(show); clearTimeout(hide); };
+  }, [user]);
+
   function scrollToEnd() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }
@@ -115,31 +125,66 @@ export default function BabaAssistant() {
 
   return (
     <>
+      {/* One-time "drag me" tip — only while the button is at its default spot */}
+      {showHint && !btnPos && !open && (
+        <div style={{
+          position: 'fixed', left: 22, bottom: 94, zIndex: 1001, maxWidth: 236,
+          background: 'var(--card)', color: 'var(--ink)', border: '1px solid var(--line)',
+          borderRadius: 14, padding: '11px 30px 12px 14px',
+          boxShadow: '0 14px 36px rgba(0,0,0,.3)', animation: 'fade-up .28s ease both',
+        }}>
+          <button onClick={() => setShowHint(false)} aria-label="Dismiss tip" style={{
+            position: 'absolute', top: 7, right: 8, width: 20, height: 20, border: 'none',
+            background: 'transparent', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 15, lineHeight: 1,
+          }}>×</button>
+          <div style={{ fontSize: 13.5, fontWeight: 800, marginBottom: 3 }}>👋 Hi, I'm Baba</div>
+          <div style={{ fontSize: 12.5, color: 'var(--ink-2)', lineHeight: 1.5 }}>
+            You can drag me anywhere on the screen — I'll stay wherever you drop me.
+          </div>
+          {/* tail pointing down to the button */}
+          <span aria-hidden style={{
+            position: 'absolute', bottom: -7, left: 24, width: 13, height: 13,
+            background: 'var(--card)', borderRight: '1px solid var(--line)',
+            borderBottom: '1px solid var(--line)', transform: 'rotate(45deg)',
+          }} />
+        </div>
+      )}
+
       {/* Floating button — tap to open, drag to reposition */}
       <button
         onPointerDown={btnDown}
         onPointerMove={btnMove}
         onPointerUp={btnUp}
         onPointerCancel={btnUp}
-        title="Ask Baba (drag to move)"
+        title="Ask Baba — drag to move me"
+        aria-label="Ask Baba"
         style={{
           position: 'fixed', zIndex: 1000,
           ...(btnPos ? { left: btnPos.x, top: btnPos.y } : { left: 24, bottom: 24 }),
-          width: 56, height: 56, borderRadius: '50%', cursor: 'pointer', border: 'none',
-          background: 'linear-gradient(135deg,#7C3AED,#2563EB)',
-          boxShadow: '0 8px 24px rgba(124,58,237,.4)',
+          width: 58, height: 58, borderRadius: '50%', cursor: 'pointer',
+          border: '1px solid rgba(255,255,255,.35)',
+          background: 'linear-gradient(140deg,#8B5CF6 0%,#6366F1 52%,#2563EB 100%)',
+          boxShadow: '0 10px 26px rgba(99,102,241,.5), inset 0 1px 1px rgba(255,255,255,.45)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform .15s', touchAction: 'none',
+          transition: 'transform .15s, box-shadow .2s', touchAction: 'none',
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.06)')}
+        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.08)')}
         onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
       >
+        {/* soft pulsing glow halo (sits behind the orb) */}
+        <span aria-hidden style={{
+          position: 'absolute', inset: -5, borderRadius: '50%', zIndex: -1,
+          background: 'linear-gradient(140deg,#8B5CF6,#2563EB)', filter: 'blur(9px)',
+          opacity: 0.6, pointerEvents: 'none',
+          animation: open ? 'none' : 'babaPulse 2.6s ease-in-out infinite',
+        }} />
         {open ? (
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
         ) : (
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2a2 2 0 0 1 2 2v1h3a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-3l-4 3v-3H7a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h3V4a2 2 0 0 1 2-2z" />
-            <circle cx="9" cy="11.5" r="1.1" fill="#fff" stroke="none" /><circle cx="15" cy="11.5" r="1.1" fill="#fff" stroke="none" />
+          // Clean "AI sparkle" mark — professional, on-brand.
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3l1.7 4.5L18 9l-4.3 1.5L12 15l-1.7-4.5L6 9l4.3-1.5L12 3z" fill="#fff" stroke="none" />
+            <path d="M19 13l.8 2.2L22 16l-2.2.8L19 19l-.8-2.2L16 16l2.2-.8L19 13z" fill="#fff" stroke="none" opacity=".9" />
           </svg>
         )}
       </button>
@@ -241,7 +286,7 @@ export default function BabaAssistant() {
         </div>
       )}
 
-      <style>{`@keyframes babaBlink{0%,100%{opacity:.3}50%{opacity:1}}`}</style>
+      <style>{`@keyframes babaBlink{0%,100%{opacity:.3}50%{opacity:1}}@keyframes babaPulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:.75;transform:scale(1.15)}}`}</style>
     </>
   );
 }

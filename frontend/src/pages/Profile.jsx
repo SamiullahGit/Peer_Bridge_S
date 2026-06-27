@@ -14,6 +14,7 @@ import { tagTone, linkifyHTML } from '../utils/format.js';
 import { ProfileSkeleton } from '../components/Skeleton.jsx';
 import VerifiedTick, { isVerified } from '../components/VerifiedTick.jsx';
 import FollowListModal from '../components/FollowListModal.jsx';
+import ShareSheet      from '../components/ShareSheet.jsx';
 import { badgesFor } from '../utils/badges.js';
 
 const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE'];
@@ -61,14 +62,13 @@ export default function Profile() {
   const [showReport, setShowReport] = useState(false);
   const [followModal, setFollowModal] = useState(null);   // 'followers' | 'following' | null
   const [postTab, setPostTab] = useState('all');          // 'all' | 'media'
+  const [shareItem, setShareItem] = useState(null);       // { url, title }
 
   useEffect(() => { loadProfile(); /* eslint-disable-next-line */ }, [profileId]);
 
   function shareProfile() {
     const url = `${location.origin}/profile?id=${profileId}`;
-    navigator.clipboard?.writeText(url)
-      .then(() => toast('Profile link copied!'))
-      .catch(() => toast(url));
+    setShareItem({ url, title: profile?.name ? `${profile.name} on Peer Bridge` : 'Profile on Peer Bridge' });
   }
 
   async function toggleFollow() {
@@ -331,6 +331,14 @@ export default function Profile() {
           mode={followModal}
           onClose={() => setFollowModal(null)}
           onOpenProfile={(id) => navigate(`/profile?id=${id}`)}
+        />
+      )}
+
+      {shareItem && (
+        <ShareSheet
+          url={shareItem.url}
+          title={shareItem.title}
+          onClose={() => setShareItem(null)}
         />
       )}
     </Sidebar>
