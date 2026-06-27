@@ -53,7 +53,7 @@ export default function Admin() {
     ['Posts', stats.posts, 'var(--ink)'],
     ['Hidden posts', stats.hidden, 'var(--gold-ink)'],
     ['Reports', stats.reports, 'var(--blush-ink)'],
-    ['Pending mentors', stats.pending_mentors, '#7C3AED'],
+    ['Pending mentors', stats.pending_mentors, 'var(--lav-ink)'],
     ['Locked users', stats.locked, 'var(--blush-ink)'],
   ] : [];
 
