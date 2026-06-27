@@ -147,6 +147,20 @@ export default function Feed() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
+  // Publish the topnav height so the mobile drawer + backdrop start below it
+  // (keeps the hamburger uncovered and reliably toggleable). Mirrors Sidebar.jsx.
+  const topnavRef = useRef(null);
+  useEffect(() => {
+    const el = topnavRef.current;
+    if (!el) return;
+    const setH = () => document.documentElement.style.setProperty('--snav-topnav-h', `${el.offsetHeight}px`);
+    setH();
+    const ro = new ResizeObserver(setH);
+    ro.observe(el);
+    window.addEventListener('resize', setH);
+    return () => { ro.disconnect(); window.removeEventListener('resize', setH); };
+  }, []);
+
   async function loadAll() {
     try {
       const [postsRes, eventsRes, mentorsRes] = await Promise.all([
@@ -332,7 +346,7 @@ export default function Feed() {
 
       <div className={`feed-app${collapsed ? ' sidebar-collapsed' : ''}${panelHidden ? ' panel-hidden' : ''}`}>
         {/* ── Topnav ─────────────────────────────────────────── */}
-        <header className="feed-topnav">
+        <header className="feed-topnav" ref={topnavRef}>
           <button
             type="button"
             className={`feed-mobile-toggle${mobileNavOpen ? ' is-open' : ''}`}

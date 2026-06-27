@@ -331,7 +331,9 @@
   .feed-topnav {
     position: sticky;
     top: 0;
-    z-index: 18;
+    /* Above the off-canvas drawer (20) + backdrop (19) so the hamburger stays
+       tappable and reliably closes the drawer while it's open. */
+    z-index: 30;
     padding: 12px 14px;
     flex-wrap: wrap;
     gap: 10px;
@@ -361,6 +363,9 @@
   .search-bar {
     order: 3;
     width: 100%;
+    /* flex-basis:100% forces the search onto its own row; the base `flex:1`
+       (flex-basis:0) would otherwise keep it squished beside the user chip. */
+    flex: 1 1 100%;
     max-width: none;
   }
 
@@ -385,12 +390,12 @@
 
   .user-chip-name { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
 
-  .feed-mobile-backdrop { position: fixed; inset: 0; background: rgba(13,27,42,.38); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 19; display: block; }
+  .feed-mobile-backdrop { position: fixed; top: var(--snav-topnav-h, 58px); left: 0; right: 0; bottom: 0; background: rgba(13,27,42,.38); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity .2s ease; z-index: 19; display: block; }
   .feed-mobile-backdrop.is-open { opacity: 1; pointer-events: auto; }
 
   .feed-app .snav {
     position: fixed;
-    top: 0; left: 0; bottom: 0;
+    top: var(--snav-topnav-h, 58px); left: 0; bottom: 0;
     width: min(320px, 86vw);
     transform: translateX(-100%);
     transition: transform .22s cubic-bezier(.4,0,.2,1);

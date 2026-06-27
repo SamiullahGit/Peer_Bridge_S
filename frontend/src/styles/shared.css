@@ -251,6 +251,11 @@ html,body{height:100%}
     flex-wrap:wrap;
     align-items:center;
     gap:12px;
+    /* Sit above the off-canvas drawer + backdrop so the hamburger is always
+       tappable (and reliably closes the drawer) even while it's open. */
+    position:sticky;
+    top:0;
+    z-index:30;
   }
 
   .snav-mobile-toggle{
@@ -275,10 +280,17 @@ html,body{height:100%}
   .snav-topnav-mid{
     order:3;
     width:100%;
+    /* flex-basis:100% is what actually forces this onto its own row — the base
+       rule's `flex:1` sets flex-basis:0, which would otherwise defeat width. */
+    flex:1 1 100%;
     min-width:0;
     flex-wrap:wrap;
+    gap:10px;
   }
   .snav-topnav-mid > *{min-width:0}
+  /* Keep an Upload / action button in the topnav compact instead of letting the
+     global mobile `.btn{width:100%}` rule blow it out to full width. */
+  .snav-topnav-mid .btn{width:auto;flex-shrink:0}
 
   .snav-topnav-user{
     margin-left:auto;
@@ -290,12 +302,12 @@ html,body{height:100%}
     text-overflow:ellipsis;
   }
 
-  .snav-mobile-backdrop{position:fixed;inset:0;background:rgba(13,27,42,.38);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:19;display:block}
+  .snav-mobile-backdrop{position:fixed;top:var(--snav-topnav-h,58px);left:0;right:0;bottom:0;background:rgba(13,27,42,.38);backdrop-filter:blur(3px);opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:19;display:block}
   .snav-mobile-backdrop.is-open{opacity:1;pointer-events:auto}
 
   .snav{
     position:fixed;
-    top:0;left:0;bottom:0;
+    top:var(--snav-topnav-h,58px);left:0;bottom:0;
     width:min(320px,86vw);
     z-index:20;
     transform:translateX(-100%);

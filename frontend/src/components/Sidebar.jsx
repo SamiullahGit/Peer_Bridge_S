@@ -75,6 +75,21 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
   // immediately re-collapses what the user just opened.
   const expandLock = useRef(false);
 
+  // Publish the topnav's live height as --snav-topnav-h so the mobile drawer
+  // and backdrop can start exactly below it (the topnav grows to two rows when
+  // a page injects a search bar via topnavMid). Keeps the hamburger uncovered.
+  const topnavRef = useRef(null);
+  useEffect(() => {
+    const el = topnavRef.current;
+    if (!el) return;
+    const setH = () => document.documentElement.style.setProperty('--snav-topnav-h', `${el.offsetHeight}px`);
+    setH();
+    const ro = new ResizeObserver(setH);
+    ro.observe(el);
+    window.addEventListener('resize', setH);
+    return () => { ro.disconnect(); window.removeEventListener('resize', setH); };
+  }, []);
+
   function toggleCollapsed() {
     expandLock.current = true;
     const next = !collapsed;
@@ -142,7 +157,7 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
   return (
     <div className={`with-sidebar${collapsed ? ' sidebar-collapsed' : ''}${extraClass ? ` ${extraClass}` : ''}`}>
       {/* ── Topnav ─────────────────────────────────────────── */}
-      <header className="snav-topnav">
+      <header className="snav-topnav" ref={topnavRef}>
         <button
           type="button"
           className={`snav-mobile-toggle${mobileNavOpen ? ' is-open' : ''}`}
