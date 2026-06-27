@@ -27,6 +27,33 @@ export default function BabaAssistant() {
   const scrollRef = useRef(null);
   const inputRef  = useRef(null);
 
+  // Drag-to-reposition. `pos` is the panel's top-left in px once the user has
+  // dragged it; null means "use the default bottom-left anchor". Pointer
+  // capture on the header keeps the drag smooth even past the handle's edges.
+  const [pos, setPos] = useState(null);
+  const panelRef = useRef(null);
+  const drag     = useRef(null);
+
+  function startDrag(e) {
+    if (!panelRef.current) return;
+    const r = panelRef.current.getBoundingClientRect();
+    drag.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    e.currentTarget.style.cursor = 'grabbing';
+  }
+  function onDrag(e) {
+    const d = drag.current;
+    if (!d) return;
+    const x = Math.max(8, Math.min(d.ox + e.clientX - d.sx, window.innerWidth  - d.w - 8));
+    const y = Math.max(8, Math.min(d.oy + e.clientY - d.sy, window.innerHeight - d.h - 8));
+    setPos({ x, y });
+  }
+  function endDrag(e) {
+    drag.current = null;
+    e.currentTarget.style.cursor = 'grab';
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* noop */ }
+  }
+
   useEffect(() => {
     if (open) requestAnimationFrame(() => { inputRef.current?.focus(); scrollToEnd(); });
   }, [open]);
@@ -86,24 +113,38 @@ export default function BabaAssistant() {
 
       {/* Chat panel */}
       {open && (
-        <div style={{
-          position: 'fixed', left: 24, bottom: 92, zIndex: 1000,
+        <div ref={panelRef} style={{
+          position: 'fixed', zIndex: 1000,
+          ...(pos ? { left: pos.x, top: pos.y } : { left: 24, bottom: 92 }),
           width: 'min(380px, calc(100vw - 48px))', height: 'min(540px, calc(100vh - 140px))',
           background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 18,
           boxShadow: '0 24px 64px rgba(0,0,0,.3)', display: 'flex', flexDirection: 'column',
-          overflow: 'hidden', animation: 'fade-up .2s ease both',
+          overflow: 'hidden', animation: pos ? 'none' : 'fade-up .2s ease both',
         }}>
-          {/* Header */}
-          <div style={{
-            padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11,
-            background: 'linear-gradient(135deg,#7C3AED,#2563EB)', flexShrink: 0,
-          }}>
+          {/* Header — doubles as the drag handle */}
+          <div
+            onPointerDown={startDrag}
+            onPointerMove={onDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={endDrag}
+            style={{
+              padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11,
+              background: 'linear-gradient(135deg,#7C3AED,#2563EB)', flexShrink: 0,
+              cursor: 'grab', touchAction: 'none', userSelect: 'none',
+            }}>
             <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,.2)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🧕</div>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: '#fff', lineHeight: 1.1 }}>Ask Baba</div>
               <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,.8)' }}>Your AI study buddy</div>
             </div>
+            {/* Grip affordance so users know the bar is draggable */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.7)"
+                 strokeWidth="2" strokeLinecap="round" style={{ flexShrink: 0 }} aria-hidden="true">
+              <circle cx="9" cy="6" r="1" /><circle cx="15" cy="6" r="1" />
+              <circle cx="9" cy="12" r="1" /><circle cx="15" cy="12" r="1" />
+              <circle cx="9" cy="18" r="1" /><circle cx="15" cy="18" r="1" />
+            </svg>
           </div>
 
           {/* Messages */}

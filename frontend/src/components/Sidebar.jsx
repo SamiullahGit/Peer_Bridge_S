@@ -177,13 +177,25 @@ export default function Sidebar({ active, children, topnavMid = null, extraClass
       {/* ── Side-nav ──────────────────────────────────────── */}
       <div className={`snav-mobile-backdrop${mobileNavOpen ? ' is-open' : ''}`} onClick={closeMobileNav} />
       <nav className={`snav${mobileNavOpen ? ' mobile-open' : ''}`}>
-        <button className="snav-pin-btn" onClick={toggleCollapsed} title="Toggle sidebar">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6"  x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
+        <button className="snav-pin-btn" onClick={toggleCollapsed}
+                aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          {collapsed ? (
+            /* Collapsed → hamburger (open / expand the rail) */
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6"  x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          ) : (
+            /* Expanded → double-chevron-left (collapse the rail) */
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m11 17-5-5 5-5" />
+              <path d="m18 17-5-5 5-5" />
+            </svg>
+          )}
         </button>
 
         <div className="snav-section">Main</div>
