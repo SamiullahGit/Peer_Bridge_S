@@ -4,7 +4,7 @@ const multer = require('multer');
 const auth         = require('../middleware/auth');
 const { supabase } = require('../config/supabase');
 const xpManager    = require('../services/xpManager');
-const { notify }   = require('../services/notify');
+const { notify, notifyMentions } = require('../services/notify');
 const { shapePost, shapeReply } = require('../data/shapers');
 
 const REACTIONS = ['like', 'helpful', 'love', 'insightful', 'celebrate'];
@@ -104,6 +104,11 @@ router.post('/', auth, (req, res) => {
       if (error) throw error;
 
       const [shaped] = await decoratePosts([post], req.user.id);
+
+      // Notify anyone @mentioned in the title/body.
+      notifyMentions(`${title} ${body || ''}`, {
+        actorId: req.user.id, entityType: 'post', entityId: post.id,
+      });
 
       // Asking a question -> +5 XP for STUDENT only.
       let xp_earned = null;
@@ -273,6 +278,8 @@ router.post('/:id/replies', auth, async (req, res) => {
         text: `replied to your post "${(parent.title || '').slice(0, 40)}"`,
       });
     }
+    // Notify anyone @mentioned in the reply.
+    notifyMentions(text, { actorId: req.user.id, entityType: 'post', entityId: req.params.id });
 
     // Answering -> +10 XP for MENTOR only.
     let xp_earned = null;

@@ -21,6 +21,18 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
   const [pollQ, setPollQ]           = useState('');
   const [pollOpts, setPollOpts]     = useState(['', '']);
 
+  const [suggesting, setSuggesting] = useState(false);
+  async function suggestTag() {
+    if (!title.trim() && !body.trim()) { toast('Write something first'); return; }
+    setSuggesting(true);
+    try {
+      const r = await pb.post('/ai/suggest-tag', { title, body });
+      if (r.tag) { setTag(r.tag); toast(`Baba picked "${r.tag}"`); }
+      else toast("Baba couldn't decide — pick a tag.");
+    } catch (e) { toast(e.message || 'Failed'); }
+    finally { setSuggesting(false); }
+  }
+
   function onFileChange(e) {
     setFile(e.target.files?.[0] || null);
   }
@@ -73,7 +85,7 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
           </button>
         </div>
         <div style={{ padding: 22 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             {TAGS.map((t) => {
               const active = t === tag;
               return (
@@ -90,6 +102,17 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
                 >{t}</button>
               );
             })}
+            <button onClick={suggestTag} disabled={suggesting} title="Let Baba pick a tag" style={{
+              marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px', borderRadius: 8, cursor: suggesting ? 'wait' : 'pointer',
+              border: '1.5px solid #7C3AED', background: 'rgba(124,58,237,.08)', color: '#7C3AED',
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+            }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
+              </svg>
+              {suggesting ? 'Thinking…' : 'Suggest tag'}
+            </button>
           </div>
 
           <input

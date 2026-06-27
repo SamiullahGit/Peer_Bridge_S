@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import RequireAuth   from './components/RequireAuth.jsx';
 import XpToastHost   from './components/XpToastHost.jsx';
 import MsgPopupHost  from './components/MsgPopup.jsx';
+import BabaAssistant from './components/BabaAssistant.jsx';
 import { NotificationProvider } from './context/NotificationContext.jsx';
 import { ThemeProvider } from './context/ThemeContext.jsx';
 
@@ -15,6 +16,8 @@ import Messages  from './pages/Messages.jsx';
 import Profile   from './pages/Profile.jsx';
 import Saved     from './pages/Saved.jsx';
 import Groups    from './pages/Groups.jsx';
+import Leaderboard from './pages/Leaderboard.jsx';
+import Admin       from './pages/Admin.jsx';
 
 export default function App() {
   return (
@@ -22,6 +25,7 @@ export default function App() {
       <NotificationProvider>
         <XpToastHost />
         <MsgPopupHost />
+        <BabaAssistant />
         <Routes>
           <Route path="/"          element={<Landing />} />
           <Route path="/index.html" element={<Navigate to="/" replace />} />
@@ -34,6 +38,8 @@ export default function App() {
           <Route path="/profile"   element={<RequireAuth><Profile /></RequireAuth>} />
           <Route path="/saved"     element={<RequireAuth><Saved /></RequireAuth>} />
           <Route path="/groups"    element={<RequireAuth><Groups /></RequireAuth>} />
+          <Route path="/leaderboard" element={<RequireAuth><Leaderboard /></RequireAuth>} />
+          <Route path="/admin"     element={<RequireAuth><Admin /></RequireAuth>} />
 
           {/* Legacy URLs from the vanilla version. */}
           <Route path="/feed.html"      element={<Navigate to="/feed"      replace />} />

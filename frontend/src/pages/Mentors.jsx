@@ -21,6 +21,20 @@ export default function Mentors() {
   const [requested, setRequested] = useState(new Set());
   const debounceRef = useRef(null);
 
+  const [aiQuery, setAiQuery]   = useState('');
+  const [aiMatches, setAiMatches] = useState(null);
+  const [aiBusy, setAiBusy]     = useState(false);
+  async function findWithAI() {
+    if (!aiQuery.trim()) { toast('Describe what you need help with'); return; }
+    setAiBusy(true); setAiMatches(null);
+    try {
+      const r = await pb.post('/ai/match-mentors', { query: aiQuery.trim() });
+      setAiMatches(r.matches || []);
+      if (!r.matches?.length) toast(r.note || 'No matches found');
+    } catch (e) { toast(e.message || 'Failed'); }
+    finally { setAiBusy(false); }
+  }
+
   // Initial load: pull "my requests" first so the badges render correctly,
   // then load mentors. After mount, react to dept/skill filter changes.
   useEffect(() => { loadMyRequests(); /* eslint-disable-next-line */ }, []);
@@ -113,6 +127,59 @@ export default function Mentors() {
             )}
           </div>
         </section>
+
+        {/* AI mentor matcher */}
+        <div style={{ marginTop: 18, padding: 18, borderRadius: 16,
+                      border: '1.5px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 18 }}>🧕</span>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>Find your mentor with Baba</div>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Describe your goal and AI will match you to the best mentors.</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              value={aiQuery} onChange={(e) => setAiQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && findWithAI()}
+              placeholder="e.g. I want to break into machine learning and prep for an FYP"
+              style={{ flex: 1, minWidth: 240, padding: '11px 14px', borderRadius: 11,
+                       border: '1.5px solid var(--line)', background: 'var(--card)', color: 'var(--ink)',
+                       fontFamily: 'inherit', fontSize: 13.5, outline: 'none' }}
+            />
+            <button onClick={findWithAI} disabled={aiBusy} style={{
+              padding: '11px 20px', borderRadius: 11, border: 'none', cursor: aiBusy ? 'wait' : 'pointer',
+              background: 'linear-gradient(135deg,#7C3AED,#2563EB)', color: '#fff',
+              fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700,
+            }}>{aiBusy ? 'Matching…' : 'Match me'}</button>
+          </div>
+
+          {aiMatches && aiMatches.length > 0 && (
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {aiMatches.map((m) => (
+                <div key={m.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start',
+                                         padding: 12, borderRadius: 12, background: 'var(--card)', border: '1px solid var(--line)' }}>
+                  <Avatar name={m.name} size={42} imgUrl={m.profile_image || ''} shape="square" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: 14 }}>{m.name}</strong>
+                      <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>{m.department || 'NUST'}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: 'var(--ink-2)', marginTop: 3, lineHeight: 1.5 }}>
+                      <span style={{ color: '#7C3AED', fontWeight: 700 }}>Why: </span>{m.reason}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button className="chip-btn" style={{ fontSize: 12, padding: '6px 10px' }}
+                            onClick={() => navigate(`/profile?id=${m.id}`)}>View</button>
+                    <button className="btn btn-primary" style={{ fontSize: 12, padding: '7px 12px' }}
+                            onClick={() => navigate(`/messages?to=${m.id}&name=${encodeURIComponent(m.name)}`)}>Message</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div style={{
           display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',

@@ -64,6 +64,20 @@ export default function PostCard({
   const [replyingTo, setReplyingTo]   = useState(null);
   const [nestedDraft, setNestedDraft] = useState('');
 
+  // AI thread summary
+  const [summary, setSummary]   = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+  async function summarize() {
+    setMenuOpen(false);
+    setSummarizing(true);
+    try {
+      const r = await pb.post('/ai/summarize', { post_id: post.id });
+      setSummary(r.summary);
+    } catch (e) {
+      setSummary(`⚠️ ${e.message || 'Could not summarize.'}`);
+    } finally { setSummarizing(false); }
+  }
+
   async function react(key) {
     setReactOpen(false);
     const prev = myReaction;
@@ -175,16 +189,6 @@ export default function PostCard({
         </div>
 
         <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-          <button className={`act-btn${post.bookmarked ? ' saved' : ''}`}
-                  onClick={() => onBookmark(post.id)}>
-            <svg width="13" height="13" viewBox="0 0 24 24"
-                 fill={post.bookmarked ? 'currentColor' : 'none'}
-                 stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <path d="M6 3h12v18l-6-4-6 4V3Z" />
-            </svg>
-            {post.bookmarked ? 'Saved' : 'Save'}
-          </button>
-
           <div style={{ position: 'relative' }} ref={menuRef}>
             <button
               className="act-btn"
@@ -202,9 +206,31 @@ export default function PostCard({
               <div style={{
                 position: 'absolute', right: 0, top: 36,
                 background: 'var(--card)', border: '1.5px solid var(--line)', borderRadius: 10,
-                minWidth: 150, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+                minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
                 zIndex: 50, overflow: 'hidden',
               }}>
+                <button
+                  onClick={() => { setMenuOpen(false); onBookmark(post.id); }}
+                  style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: post.bookmarked ? 'var(--blue)' : 'var(--ink)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--line)' }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24"
+                       fill={post.bookmarked ? 'currentColor' : 'none'}
+                       stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M6 3h12v18l-6-4-6 4V3Z" />
+                  </svg>
+                  {post.bookmarked ? 'Unsave post' : 'Save post'}
+                </button>
+                {(post.comments_count || 0) > 0 && (
+                  <button
+                    onClick={summarize}
+                    style={{ width: '100%', padding: '10px 14px', textAlign: 'left', border: 'none', background: 'transparent', fontFamily: 'inherit', fontSize: 13, color: '#7C3AED', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--line)' }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4L12 3z" />
+                    </svg>
+                    Summarize with Baba
+                  </button>
+                )}
                 {isOwn ? (
                   <>
                     <button
@@ -283,6 +309,23 @@ export default function PostCard({
       )}
 
       {post.has_poll && <PollBlock postId={post.id} />}
+
+      {(summarizing || summary) && (
+        <div style={{ marginTop: 14, padding: 14, borderRadius: 12,
+                      border: '1.5px solid rgba(124,58,237,.3)', background: 'rgba(124,58,237,.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: summary ? 8 : 0 }}>
+            <span style={{ fontSize: 15 }}>🧕</span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: '#7C3AED' }}>Baba's summary</span>
+            {summary && (
+              <button onClick={() => setSummary(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent',
+                       color: 'var(--ink-3)', cursor: 'pointer', fontSize: 15 }}>×</button>
+            )}
+          </div>
+          {summarizing
+            ? <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>Reading the thread…</div>
+            : <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--ink)', whiteSpace: 'pre-wrap' }}>{summary}</div>}
+        </div>
+      )}
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
@@ -383,7 +426,8 @@ export default function PostCard({
                                  borderRadius: 100, background: 'var(--blue-soft)', color: 'var(--blue)' }}>MENTOR</span>
                 )}
               </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}>{r.text}</div>
+              <div style={{ fontSize: 13.5, lineHeight: 1.5, marginTop: 3, color: 'var(--ink)' }}
+                   dangerouslySetInnerHTML={{ __html: linkifyHTML(r.text) }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 5 }}>
                 <button
                   onClick={() => likeReply(r)}
