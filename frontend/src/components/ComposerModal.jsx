@@ -95,9 +95,9 @@ export default function ComposerModal({ initialTag = 'Academic Help', initialAno
                   style={{
                     padding: '6px 14px', borderRadius: 8,
                     fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                    border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
-                    background: active ? 'var(--ink)' : 'transparent',
-                    color    : active ? 'white' : 'var(--ink-2)',
+                    border: `1.5px solid ${active ? 'var(--blue)' : 'var(--line)'}`,
+                    background: active ? 'var(--blue)' : 'transparent',
+                    color    : active ? '#fff' : 'var(--ink-2)',
                   }}
                 >{t}</button>
               );

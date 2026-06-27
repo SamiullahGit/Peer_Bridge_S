@@ -50,9 +50,9 @@ export default function ReportModal({ targetType, targetId, onClose }) {
                   style={{
                     flex: 1, padding: '9px 6px', borderRadius: 9,
                     fontFamily: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                    border: `1.5px solid ${active ? 'var(--ink)' : 'var(--line)'}`,
-                    background: active ? 'var(--ink)' : 'transparent',
-                    color    : active ? 'white' : 'var(--ink-2)',
+                    border: `1.5px solid ${active ? 'var(--blue)' : 'var(--line)'}`,
+                    background: active ? 'var(--blue)' : 'transparent',
+                    color    : active ? '#fff' : 'var(--ink-2)',
                   }}
                 >{r}</button>
               );
