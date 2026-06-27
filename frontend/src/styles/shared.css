@@ -218,6 +218,17 @@ html,body{height:100%}
 .snav-pin-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;border:1.5px solid rgba(255,255,255,.15);background:transparent;cursor:pointer;color:rgba(255,255,255,.7);margin-bottom:8px;align-self:flex-start;flex-shrink:0;transition:background .15s,color .15s,border-color .15s}
 .snav-pin-btn:hover{background:rgba(255,255,255,.1);color:white;border-color:rgba(255,255,255,.3)}
 
+/* Hamburger ⇄ back-arrow morph. Three persistent bars: the middle bar is the
+   arrow shaft and never moves; in the arrow state the top + bottom bars slide
+   to the shaft's left tip and rotate ∓45° to form the "<" arrowhead. */
+.nav-burger{position:relative;display:block;width:18px;height:14px}
+.nav-burger-line{position:absolute;left:0;width:18px;height:2px;border-radius:2px;background:currentColor;transform-origin:left center;transition:top .28s cubic-bezier(.4,0,.2,1),transform .28s cubic-bezier(.4,0,.2,1),width .28s cubic-bezier(.4,0,.2,1)}
+.nb-top{top:0}
+.nb-mid{top:6px}
+.nb-bot{top:12px}
+.nav-burger.is-arrow .nb-top{top:6px;width:9px;transform:rotate(-45deg)}
+.nav-burger.is-arrow .nb-bot{top:6px;width:9px;transform:rotate(45deg)}
+
 .form-two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .stack-actions{display:flex;gap:10px;flex-wrap:wrap}
 

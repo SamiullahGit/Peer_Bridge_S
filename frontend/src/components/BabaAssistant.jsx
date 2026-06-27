@@ -54,6 +54,35 @@ export default function BabaAssistant() {
     try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* noop */ }
   }
 
+  // Launcher button is both clickable AND draggable. We tell a tap from a drag
+  // with a small movement threshold: if the pointer barely moves it's a tap
+  // (toggle the chat); if it travels past the threshold it's a drag (reposition
+  // and suppress the toggle).
+  const [btnPos, setBtnPos] = useState(null);
+  const btnDrag = useRef(null);
+
+  function btnDown(e) {
+    const r = e.currentTarget.getBoundingClientRect();
+    btnDrag.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function btnMove(e) {
+    const d = btnDrag.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) < 5) return;   // below threshold → still a tap
+    d.moved = true;
+    const x = Math.max(8, Math.min(d.ox + dx, window.innerWidth  - d.w - 8));
+    const y = Math.max(8, Math.min(d.oy + dy, window.innerHeight - d.h - 8));
+    setBtnPos({ x, y });
+  }
+  function btnUp(e) {
+    const d = btnDrag.current;
+    btnDrag.current = null;
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* noop */ }
+    if (d && !d.moved) setOpen((o) => !o);   // it was a tap → toggle the chat
+  }
+
   useEffect(() => {
     if (open) requestAnimationFrame(() => { inputRef.current?.focus(); scrollToEnd(); });
   }, [open]);
@@ -86,17 +115,21 @@ export default function BabaAssistant() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button — tap to open, drag to reposition */}
       <button
-        onClick={() => setOpen((o) => !o)}
-        title="Ask Baba"
+        onPointerDown={btnDown}
+        onPointerMove={btnMove}
+        onPointerUp={btnUp}
+        onPointerCancel={btnUp}
+        title="Ask Baba (drag to move)"
         style={{
-          position: 'fixed', left: 24, bottom: 24, zIndex: 1000,
+          position: 'fixed', zIndex: 1000,
+          ...(btnPos ? { left: btnPos.x, top: btnPos.y } : { left: 24, bottom: 24 }),
           width: 56, height: 56, borderRadius: '50%', cursor: 'pointer', border: 'none',
           background: 'linear-gradient(135deg,#7C3AED,#2563EB)',
           boxShadow: '0 8px 24px rgba(124,58,237,.4)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform .15s',
+          transition: 'transform .15s', touchAction: 'none',
         }}
         onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.06)')}
         onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
