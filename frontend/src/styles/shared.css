@@ -65,8 +65,12 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,.45);
   --shadow-md: 0 12px 28px rgba(0,0,0,.5);
   --shadow-lg: 0 24px 64px rgba(0,0,0,.62);
-  --nav-bg:    #0E1626;
-  --nav-bg-hover: rgba(255,255,255,.07);
+  /* Navigation rail: a near-neutral graphite, NOT a blue-slate. The channels
+     are kept close (R10 G13 B19 → almost no blue cast) and it sits a touch
+     darker than --bg so the sidebar recedes as the app's floor instead of
+     popping forward. This is the Linear/Vercel/GitHub-style chrome tone. */
+  --nav-bg:    #0A0D13;
+  --nav-bg-hover: rgba(255,255,255,.06);
 }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
@@ -357,3 +361,34 @@ html,body{height:100%}
 [data-theme="dark"] .tag-peach { border-color: rgba(251,191,36,.25); }
 [data-theme="dark"] .notif-dropdown { background: var(--card); border-color: var(--line); box-shadow: 0 16px 48px rgba(0,0,0,.55); }
 [data-theme="dark"] .msg-popup-item { background: var(--card); border-color: var(--line); }
+
+/* ── Dark navigation shell ──────────────────────────────────────────
+   The sidebar + top bar are the only chrome shared by every inner page
+   (Mentors, Resources, Events, Messages, Study Groups, Saved, Profile).
+   In light mode they're a deep brand navy (#304d72). In dark mode that
+   stays far too bright next to the midnight-slate body, so we drop them
+   to the near-neutral graphite --nav-bg (#0A0D13). The item / hover
+   / active states already use rgba(255,255,255,…) tints that read fine
+   on a dark navy, so only the solid surfaces + borders move here. The
+   active tab is re-tinted with the signature purple so it gets a subtle
+   brand glow with high-contrast white text. */
+[data-theme="dark"] .snav-topnav,
+[data-theme="dark"] .snav { background: var(--nav-bg); }
+[data-theme="dark"] .snav-topnav { box-shadow: 0 1px 0 rgba(255,255,255,.05); }
+[data-theme="dark"] .snav { border-right-color: var(--line); }
+[data-theme="dark"] .snav-topnav-logo { border-right-color: var(--line); }
+[data-theme="dark"] .snav-item.active {
+  background: var(--accent-soft);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--blue-mid), 0 2px 14px -6px var(--blue);
+}
+[data-theme="dark"] .snav-item.active svg { stroke: var(--blue-2) !important; }
+[data-theme="dark"] .snav-footer { background: rgba(255,255,255,.04); border-color: var(--line); }
+
+/* Notification bell badge ring blends into whichever bar hosts it. */
+[data-theme="dark"] .notif-bell-badge { border-color: var(--nav-bg); }
+
+/* Translucent-white surfaces that never got a dark treatment. */
+[data-theme="dark"] .page-nav { background: rgba(11,17,30,.82); border-bottom-color: var(--line); }
+[data-theme="dark"] .surface-soft { background: rgba(255,255,255,.03); border-color: var(--line); }
+[data-theme="dark"] .brand-wordmark { color: var(--ink); }

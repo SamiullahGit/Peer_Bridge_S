@@ -425,7 +425,7 @@
 
 /* ── Dark mode overrides ──────────────────────────────────────────── */
 [data-theme="dark"] .feed { background: var(--bg); color: var(--ink); }
-[data-theme="dark"] .feed-topnav { background: #0e1117; box-shadow: 0 1px 0 rgba(255,255,255,.06); }
+[data-theme="dark"] .feed-topnav { background: var(--nav-bg); box-shadow: 0 1px 0 rgba(255,255,255,.06); }
 [data-theme="dark"] .feed-topnav-logo { border-right-color: rgba(255,255,255,.07); }
 [data-theme="dark"] .search-bar { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.09); }
 [data-theme="dark"] .search-bar:focus-within { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }

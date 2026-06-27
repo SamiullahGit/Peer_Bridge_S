@@ -524,7 +524,7 @@ export default function Feed() {
               </p>
               <button onClick={() => openComposer()} style={{
                 marginTop: 20, padding: '10px 24px', border: 'none', borderRadius: 9,
-                background: '#2563EB', color: 'white',
+                background: 'var(--blue)', color: 'white',
                 fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
               }}>Post something -&gt;</button>
             </div>

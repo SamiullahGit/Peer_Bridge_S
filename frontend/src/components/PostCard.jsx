@@ -282,7 +282,7 @@ export default function PostCard({
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={handleSave} disabled={saving || !editTitle.trim()}
-              style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: '#2563EB', color: 'white', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
+              style={{ padding: '8px 18px', borderRadius: 9, border: 'none', background: 'var(--blue)', color: 'white', fontFamily: 'inherit', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.7 : 1 }}
             >{saving ? 'Saving…' : 'Save'}</button>
             <button
               onClick={() => setEditing(false)}

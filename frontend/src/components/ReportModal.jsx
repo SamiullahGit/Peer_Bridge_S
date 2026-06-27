@@ -60,7 +60,7 @@ export default function ReportModal({ targetType, targetId, onClose }) {
           </div>
           <button onClick={submit} disabled={busy} style={{
             width: '100%', padding: 12, border: 'none', borderRadius: 10,
-            background: '#2563EB', color: 'white', cursor: 'pointer',
+            background: 'var(--blue)', color: 'white', cursor: 'pointer',
             fontFamily: 'inherit', fontSize: 14, fontWeight: 700,
           }}>{busy ? 'Submitting…' : 'Submit'}</button>
         </div>
