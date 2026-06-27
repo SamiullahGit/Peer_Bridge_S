@@ -60,12 +60,14 @@ router.get('/mentors', auth, async (req, res) => {
   }
 });
 
-// IDs of mentors the current user has already requested.
+// Mentors the current user has requested, with each request's status so the
+// client can tell "pending" apart from "accepted"/"declined" (otherwise an
+// accepted request would still render as "Requested" forever).
 router.get('/my-requests', auth, async (req, res) => {
   try {
     const { data } = await supabase
-      .from('mentorship_requests').select('mentor_id').eq('requester_id', req.user.id);
-    res.json((data || []).map(r => r.mentor_id));
+      .from('mentorship_requests').select('mentor_id, status').eq('requester_id', req.user.id);
+    res.json(data || []);
   } catch {
     res.status(500).json({ error: 'Failed to fetch requests' });
   }
@@ -321,6 +323,9 @@ router.post('/promote-to-mentor', auth, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────
 router.post('/:id/request-mentorship', auth, async (req, res) => {
   try {
+    if (req.params.id === req.user.id)
+      return res.status(400).json({ error: 'You cannot request mentorship from yourself' });
+
     const message = req.body.message || null;
     await supabase.from('mentorship_requests').insert({
       requester_id: req.user.id,

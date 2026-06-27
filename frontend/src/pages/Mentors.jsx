@@ -6,6 +6,7 @@ import Avatar     from '../components/Avatar.jsx';
 import ToastHost  from '../components/Toast.jsx';
 import { toast }  from '../components/Toast.jsx';
 import { pb }     from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { MentorCardSkeleton } from '../components/Skeleton.jsx';
 import VerifiedTick, { FOLLOWERS_FOR_VERIFIED } from '../components/VerifiedTick.jsx';
 
@@ -13,12 +14,14 @@ const DEPTS = ['', 'SEECS', 'NBS', 'SMME', 'CEME', 'SCME', 'S3H', 'ASAB', 'CAE']
 
 export default function Mentors() {
   const navigate                  = useNavigate();
+  const { user: me }              = useAuth();
   const [mentors, setMentors]     = useState([]);
   const [loading, setLoading]     = useState(true);
   const [searchVal, setSearchVal] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [skillFilter, setSkillFilter] = useState('');
-  const [requested, setRequested] = useState(new Set());
+  // mentorId -> request status ('pending' | 'accepted' | 'declined')
+  const [reqStatus, setReqStatus] = useState({});
   const debounceRef = useRef(null);
 
   const [aiQuery, setAiQuery]   = useState('');
@@ -29,8 +32,9 @@ export default function Mentors() {
     setAiBusy(true); setAiMatches(null);
     try {
       const r = await pb.post('/ai/match-mentors', { query: aiQuery.trim() });
-      setAiMatches(r.matches || []);
-      if (!r.matches?.length) toast(r.note || 'No matches found');
+      const matches = (r.matches || []).filter((m) => m.id !== me?.id);
+      setAiMatches(matches);
+      if (!matches.length) toast(r.note || 'No matches found');
     } catch (e) { toast(e.message || 'Failed'); }
     finally { setAiBusy(false); }
   }
@@ -46,15 +50,21 @@ export default function Mentors() {
     if (deptFilter)  q.set('dept',   deptFilter);
     if (skillFilter) q.set('skill',  skillFilter);
     setLoading(true);
-    try { setMentors(await pb.get('/users/mentors?' + q)); }
+    try {
+      const list = await pb.get('/users/mentors?' + q);
+      // Never list the signed-in user as a mentor to themselves.
+      setMentors((list || []).filter((m) => m.id !== me?.id));
+    }
     catch { toast('Failed to load mentors'); }
     finally { setLoading(false); }
   }
 
   async function loadMyRequests() {
     try {
-      const ids = await pb.get('/users/my-requests');
-      setRequested(new Set(ids));
+      const rows = await pb.get('/users/my-requests');
+      const map = {};
+      (rows || []).forEach((r) => { map[r.mentor_id] = r.status; });
+      setReqStatus(map);
     } catch { /* silent */ }
   }
 
@@ -68,7 +78,7 @@ export default function Mentors() {
     try {
       await pb.post(`/users/${id}/request-mentorship`,
         { message: 'Hi! I would love to connect for mentorship.' });
-      setRequested((prev) => new Set([...prev, id]));
+      setReqStatus((prev) => ({ ...prev, [id]: 'pending' }));
       toast(`Request sent to ${name}!`);
     } catch (e) {
       toast(e.message || 'Failed to send request');
@@ -195,7 +205,7 @@ export default function Mentors() {
             <MentorCard
               key={m.id}
               m={m}
-              isRequested={requested.has(m.id)}
+              status={reqStatus[m.id]}
               onProfile={() => navigate(`/profile?id=${m.id}`)}
               onMessage={() => navigate(`/messages?to=${m.id}&name=${encodeURIComponent(m.name)}`)}
               onConnect={() => requestMentorship(m.id, m.name)}
@@ -208,7 +218,7 @@ export default function Mentors() {
   );
 }
 
-function MentorCard({ m, isRequested, onProfile, onMessage, onConnect, onSkill }) {
+function MentorCard({ m, status, onProfile, onMessage, onConnect, onSkill }) {
   const isVerified = (m.rating || 0) >= 4 && (m.rating_count || 0) >= 10;
   const skills = Array.isArray(m.skills) ? m.skills : [];
 
@@ -281,7 +291,13 @@ function MentorCard({ m, isRequested, onProfile, onMessage, onConnect, onSkill }
             className="chip-btn" style={{ fontSize: 12, padding: '6px 10px' }}
             onClick={(e) => { e.stopPropagation(); onMessage(); }}
           >Message</button>
-          {isRequested ? (
+          {status === 'accepted' ? (
+            <button className="btn btn-ghost" disabled
+                    style={{ fontSize: 12, padding: '8px 12px',
+                             color: 'var(--mint-ink)', borderColor: 'var(--mint)', cursor: 'default' }}>
+              ✓ Connected
+            </button>
+          ) : status === 'pending' ? (
             <button className="btn btn-ghost" disabled
                     style={{ fontSize: 12, padding: '8px 12px',
                              color: 'var(--blue)', borderColor: 'var(--blue-mid)', cursor: 'default' }}>

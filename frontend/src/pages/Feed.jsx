@@ -168,7 +168,9 @@ export default function Feed() {
         pb.get('/events?upcoming=true'),
         pb.get('/users/mentors'),
       ]);
-      setPosts(postsRes); setEvents(eventsRes); setMentors(mentorsRes);
+      // Don't surface the signed-in user in their own "Top mentors" panel.
+      setPosts(postsRes); setEvents(eventsRes);
+      setMentors((mentorsRes || []).filter((m) => m.id !== me?.id));
     } catch (e) {
       toast('Failed to load feed: ' + e.message);
     } finally {
